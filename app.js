@@ -397,6 +397,218 @@ const obitsCol = collection(db, 'obituaries');
     });
   }
 
+  // 장사시설 검색 bottom-sheet (장지)
+  const SIDO_LIST = [
+    { code: '서울특별시', label: '서울' },
+    { code: '부산광역시', label: '부산' },
+    { code: '대구광역시', label: '대구' },
+    { code: '인천광역시', label: '인천' },
+    { code: '광주광역시', label: '광주' },
+    { code: '대전광역시', label: '대전' },
+    { code: '울산광역시', label: '울산' },
+    { code: '세종특별자치시', label: '세종' },
+    { code: '경기도', label: '경기' },
+    { code: '강원특별자치도', label: '강원' },
+    { code: '충청북도', label: '충북' },
+    { code: '충청남도', label: '충남' },
+    { code: '전북특별자치도', label: '전북' },
+    { code: '전라남도', label: '전남' },
+    { code: '경상북도', label: '경북' },
+    { code: '경상남도', label: '경남' },
+    { code: '제주특별자치도', label: '제주' },
+  ];
+
+  let funeralAllCache = null;
+  const NUM_PER_PAGE = 500;
+
+  async function fetchAllFuneralFacilities() {
+    if (funeralAllCache) return funeralAllCache;
+    const first = await fetch(`/api/funeral?numOfRows=${NUM_PER_PAGE}&pageNo=1`).then(r => r.json());
+    if (first?.error) throw new Error(first.error);
+    const total = Number(first?.totalCount || 0);
+    const pageCount = Math.max(1, Math.ceil(total / NUM_PER_PAGE));
+    let items = Array.isArray(first?.items) ? first.items : [];
+    if (pageCount > 1) {
+      const rest = await Promise.all(
+        Array.from({ length: pageCount - 1 }, (_, i) => i + 2).map(async p => {
+          const d = await fetch(`/api/funeral?numOfRows=${NUM_PER_PAGE}&pageNo=${p}`).then(r => r.json());
+          return Array.isArray(d?.items) ? d.items : [];
+        })
+      );
+      items = items.concat(...rest);
+    }
+    funeralAllCache = items;
+    return items;
+  }
+
+  function openAddressSearchSheet({ title = '장례식장 검색', value, onConfirm }) {
+    let allItems = [];
+    let loading = true;
+    let errorMsg = '';
+    let query = '';
+    let page = 1;
+    const PAGE_SIZE = 10;
+    const PAGE_WINDOW = 5;
+
+    const getFiltered = () => {
+      const q = query.trim();
+      if (!q) return allItems;
+      return allItems.filter(it =>
+        (it.fcltNm || '').includes(q) ||
+        (it.addr || '').includes(q) ||
+        (it.sigungu || '').includes(q) ||
+        (it.ctpv || '').includes(q)
+      );
+    };
+
+    const renderPagination = (totalPages) => {
+      if (totalPages <= 1) return '';
+      let start = Math.max(1, page - Math.floor(PAGE_WINDOW / 2));
+      let end = Math.min(totalPages, start + PAGE_WINDOW - 1);
+      start = Math.max(1, end - PAGE_WINDOW + 1);
+      const pages = [];
+      for (let i = start; i <= end; i++) pages.push(i);
+      return `
+        <div class="pagination">
+          <button class="pagination__btn" data-page="${page - 1}" ${page === 1 ? 'disabled' : ''} aria-label="이전">‹</button>
+          ${pages.map(p => `<button class="pagination__btn ${p === page ? 'is-on' : ''}" data-page="${p}">${p}</button>`).join('')}
+          <button class="pagination__btn" data-page="${page + 1}" ${page === totalPages ? 'disabled' : ''} aria-label="다음">›</button>
+        </div>
+      `;
+    };
+
+    const computeView = () => {
+      const list = getFiltered();
+      const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+      if (page > totalPages) page = totalPages;
+      if (page < 1) page = 1;
+      const start = (page - 1) * PAGE_SIZE;
+      const slice = list.slice(start, start + PAGE_SIZE);
+      return { list, totalPages, slice };
+    };
+
+    const renderSummary = () => {
+      if (loading || errorMsg) return '';
+      const { list, totalPages } = computeView();
+      if (list.length === 0) return '';
+      return `<div class="search-summary">총 ${list.length}건 · ${page}/${totalPages} 페이지</div>`;
+    };
+
+    const renderResults = () => {
+      if (loading) return `<div class="search-empty">전국 장례식장 정보를 불러오는 중...</div>`;
+      if (errorMsg) return `<div class="search-empty">${escapeHtml(errorMsg)}</div>`;
+      const { list, slice } = computeView();
+      if (list.length === 0) {
+        return `<div class="search-empty">검색 결과가 없습니다.<br/>다른 키워드로 시도해주세요.</div>`;
+      }
+      return slice.map(it => {
+        const name = it.fcltNm || '-';
+        const addr = it.addr || '';
+        const full = addr ? `${name} (${addr})` : name;
+        return `
+          <button type="button" class="item" data-addr="${escapeHtml(full)}">
+            <div class="addr-name">${escapeHtml(name)}</div>
+            <div class="road">${it.gubun ? `<span class="zip-chip">${escapeHtml(it.gubun)}</span>` : ''}${escapeHtml(addr)}</div>
+            ${it.telno ? `<div class="jibun"><span class="tag">전화</span>${escapeHtml(it.telno)}</div>` : ''}
+          </button>
+        `;
+      }).join('');
+    };
+
+    const renderFooterPagination = () => {
+      if (loading || errorMsg) return '';
+      const { list, totalPages } = computeView();
+      if (list.length === 0) return '';
+      return renderPagination(totalPages);
+    };
+
+    const updateResults = () => {
+      const summaryEl = $('#asSummary');
+      if (summaryEl) summaryEl.innerHTML = renderSummary();
+      const el = $('#asResults');
+      if (el) el.innerHTML = renderResults();
+      const pagEl = $('#asPagination');
+      if (pagEl) pagEl.innerHTML = renderFooterPagination();
+      bindItems();
+      bindPagination();
+    };
+
+    const bindItems = () => {
+      document.querySelectorAll('#asResults [data-addr]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          closeSheet();
+          onConfirm(btn.dataset.addr);
+        });
+      });
+    };
+
+    const bindPagination = () => {
+      document.querySelectorAll('#asPagination [data-page]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (btn.disabled) return;
+          const p = Number(btn.dataset.page);
+          if (!Number.isFinite(p) || p < 1) return;
+          page = p;
+          updateResults();
+          const resultsEl = $('#asResults');
+          if (resultsEl) resultsEl.scrollTop = 0;
+        });
+      });
+    };
+
+    openSheet(`
+      <div class="sheet-head">
+        <div class="sheet-title">${escapeHtml(title)}</div>
+        <button class="sheet-close" id="asClose" aria-label="닫기">×</button>
+      </div>
+      <div class="search-input">
+        <input class="input" id="asInput" placeholder="시설명, 주소로 검색 (전국)" value="${escapeHtml(value || '')}" autocomplete="off" />
+      </div>
+      <div id="asSummary">${renderSummary()}</div>
+      <div class="search-results" id="asResults">${renderResults()}</div>
+      <div id="asPagination">${renderFooterPagination()}</div>
+      <div class="sheet-confirm">
+        <button class="btn btn--secondary btn--block" id="asManual">직접 입력하기</button>
+      </div>
+    `);
+
+    const inputEl = $('#asInput');
+    let timer = null;
+    inputEl.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        query = inputEl.value;
+        page = 1;
+        updateResults();
+      }, 120);
+    });
+
+    $('#asClose').addEventListener('click', closeSheet);
+    $('#asManual').addEventListener('click', () => {
+      const v = (inputEl.value || '').trim();
+      if (!v) { toast('검색어 또는 주소를 입력해주세요.'); return; }
+      closeSheet();
+      onConfirm(v);
+    });
+
+    bindItems();
+    bindPagination();
+
+    setTimeout(() => inputEl.focus(), 50);
+
+    (async () => {
+      try {
+        allItems = await fetchAllFuneralFacilities();
+      } catch (e) {
+        errorMsg = '데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
+        console.error('[funeral api]', e);
+      } finally {
+        loading = false;
+        updateResults();
+      }
+    })();
+  }
+
   // 관계 선택 bottom-sheet (Bottomsheet-1 item 2)
   const RELATION_GROUPS = [
     { key: '자녀-배우자', subs: ['아들', '며느리', '딸', '사위', '남편', '아내'] },
@@ -1247,6 +1459,21 @@ const obitsCol = collection(db, 'obituaries');
           </div>
         </section>
 
+        <!-- 장례식장 -->
+        <section class="section">
+          <div class="section__head">
+            <div class="section__title"><span class="icon-bullet">⚘</span>장례식장</div>
+          </div>
+          <div class="field">
+            <label class="field__label">빈소</label>
+            <button type="button" class="picker-input ${d.funeral.funeralHome ? '' : 'picker-input--placeholder'}" data-pick-funeral="funeralHome">
+              <span>${d.funeral.funeralHome ? escapeHtml(d.funeral.funeralHome) : '장례식장을 검색해주세요'}</span>
+              <span class="picker-input__chevron">⌄</span>
+            </button>
+            <div class="field__help">* 미입력 시 빈소 정보가 부고장에 노출되지 않습니다.</div>
+          </div>
+        </section>
+
         <!-- 장례 일정 -->
         <section class="section">
           <div class="section__head">
@@ -1543,6 +1770,12 @@ const obitsCol = collection(db, 'obituaries');
               d.funeral.carryDateUndecided = dateUndecided;
               renderEditor();
             }
+          });
+        } else if (kind === 'funeralHome') {
+          openAddressSearchSheet({
+            title: '장례식장 검색',
+            value: d.funeral.funeralHome,
+            onConfirm: (v) => { d.funeral.funeralHome = v; renderEditor(); }
           });
         }
       });

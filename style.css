@@ -1771,14 +1771,111 @@ img {
   font-size: 14px;
 }
 
+.search-results .item {
+  display: block;
+  background: #fff;
+  cursor: pointer;
+}
+
 .search-results .item:hover {
   background: #f9f9f9;
 }
 
+.search-results .item .addr-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: 4px;
+}
+
 .search-results .item .road {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--c-text-2);
+  margin-top: 2px;
+}
+
+.search-results .item .road .zip-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  color: var(--c-text-3);
+  font-size: 11px;
+  line-height: 1.6;
+  flex: 0 0 auto;
+}
+
+.search-results .item .jibun {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--c-text-3);
-  margin-top: 2px;
+  margin-top: 4px;
+}
+
+.search-results .item .jibun .tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--c-border);
+  color: var(--c-text-3);
+  font-size: 11px;
+  line-height: 1.6;
+  flex: 0 0 auto;
+}
+
+.search-empty {
+  padding: 40px 12px;
+  text-align: center;
+  color: var(--c-text-3);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.search-summary {
+  padding: 8px 4px 10px;
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 0 8px;
+}
+
+.pagination__btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--c-border);
+  background: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--c-text-2);
+  cursor: pointer;
+}
+
+.pagination__btn:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.pagination__btn.is-on {
+  background: var(--c-text);
+  color: #fff;
+  border-color: var(--c-text);
+  font-weight: 600;
+}
+
+.pagination__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* Tag chips for relations */

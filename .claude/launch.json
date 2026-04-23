@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "static-http",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["-y", "serve", "/Users/taeilhan/Desktop/memorialtree", "-l", "8000"],
+      "name": "dev-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 8000
     }
   ]

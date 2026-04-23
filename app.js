@@ -224,6 +224,7 @@ const obitsCol = collection(db, 'obituaries');
     params: {},
     draft: null, // current editing obituary
     activeObituaryId: null, // for menu actions
+    authedPhone: '', // normalized phone (digits only) that passed the "나의 부고장 관리" auth
   };
 
   // ---------- Toast ----------
@@ -339,6 +340,7 @@ const obitsCol = collection(db, 'obituaries');
         toast('일치하는 부고장이 없습니다.');
         return;
       }
+      state.authedPhone = normPhone;
       closeSheet();
       navigate('my');
     });
@@ -687,6 +689,7 @@ const obitsCol = collection(db, 'obituaries');
     setHeader({ title: null, back: false, menu: true });
     state.draft = null;
     state.activeObituaryId = null;
+    state.authedPhone = '';
     viewEl.innerHTML = `
       <section class="landing">
         <div class="landing__ribbon">⚘</div>
@@ -707,7 +710,8 @@ const obitsCol = collection(db, 'obituaries');
   // ---------- My obituaries ----------
   function renderMyObituaries() {
     setHeader({ title: '나의 부고장 관리', back: true, menu: false });
-    const list = storage.list();
+    if (!state.authedPhone) return navigate('landing');
+    const list = storage.list().filter(o => (o.author?.phone || '').replace(/\D/g, '') === state.authedPhone);
     viewEl.innerHTML = `
       <div class="list">
         ${list.length === 0

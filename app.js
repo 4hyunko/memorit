@@ -2457,20 +2457,26 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
             </section>
           `: ''}
 
-          ${o.messagesEnabled ? `
+          ${o.messagesEnabled ? (() => {
+            const sorted = [...(o.messages || [])].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+            const visible = sorted.slice(0, 3);
+            const hasMore = sorted.length > 3;
+            return `
             <section class="card">
               <div class="card__title" style="display:flex;justify-content:space-between;align-items:center;">
                 <span><span class="ico">⚘</span>추모 메시지</span>
-                <div style="display:flex;gap:8px;align-items:center;">
-                  <button class="card__action" id="writeMsg">메시지 작성</button>
-                  ${!preview ? `<button class="btn--text" id="goMessages" style="font-size:12px;">더보기 ›</button>` : ''}
-                </div>
+                <button class="card__action" id="writeMsg">메시지 작성</button>
               </div>
-              ${o.messages.slice(0, 2).length === 0
-          ? `<div class="muted" style="font-size:13px;">아직 추모 메시지가 없습니다.</div>`
-          : o.messages.slice(0, 2).map(messageItem).join('')}
+              ${visible.length === 0
+                ? `<div class="muted" style="font-size:13px;">아직 추모 메시지가 없습니다.</div>`
+                : visible.map(messageItem).join('')}
+              ${!preview && hasMore ? `
+                <div style="text-align:center;margin-top:10px;">
+                  <button class="btn--text" id="goMessages" style="font-size:13px;">더보기 ›</button>
+                </div>
+              ` : ''}
             </section>
-          `: ''}
+          `;})() : ''}
 
         </div>
       </div>

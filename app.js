@@ -214,7 +214,8 @@ const obitsCol = collection(db, 'obituaries');
         carryTimeUndecided: false,
         carryDateUndecided: false,
         place: '', // 5-e 장지
-        funeralHome: '', // 빈소
+        funeralHome: '', // 장례식장 (표시용 요약 문자열)
+        funeralHomeData: null, // 장례식장 구조화 데이터 { name, addr, telno, homepageUrl, ctpv, sigungu }
         showAll: true,
       },
       // 알리는 글
@@ -489,12 +490,11 @@ const obitsCol = collection(db, 'obituaries');
       if (list.length === 0) {
         return `<div class="search-empty">검색 결과가 없습니다.<br/>다른 키워드로 시도해주세요.</div>`;
       }
-      return slice.map(it => {
+      return slice.map((it, i) => {
         const name = it.fcltNm || '-';
         const addr = it.addr || '';
-        const full = addr ? `${name} (${addr})` : name;
         return `
-          <button type="button" class="item" data-addr="${escapeHtml(full)}">
+          <button type="button" class="item" data-addr="1" data-idx="${i}">
             <div class="addr-name">${escapeHtml(name)}</div>
             <div class="road">${it.gubun ? `<span class="zip-chip">${escapeHtml(it.gubun)}</span>` : ''}${escapeHtml(addr)}</div>
             ${it.telno ? `<div class="jibun"><span class="tag">전화</span>${escapeHtml(it.telno)}</div>` : ''}
@@ -522,10 +522,17 @@ const obitsCol = collection(db, 'obituaries');
     };
 
     const bindItems = () => {
-      document.querySelectorAll('#asResults [data-addr]').forEach(btn => {
+      document.querySelectorAll('#asResults [data-idx]').forEach(btn => {
         btn.addEventListener('click', () => {
+          const idx = Number(btn.dataset.idx);
+          const { slice } = computeView();
+          const item = slice[idx];
+          if (!item) return;
+          const name = item.fcltNm || '';
+          const addr = item.addr || '';
+          const display = addr ? `${name} (${addr})` : name;
           closeSheet();
-          onConfirm(btn.dataset.addr);
+          onConfirm(display, item);
         });
       });
     };
@@ -576,7 +583,7 @@ const obitsCol = collection(db, 'obituaries');
       const v = (inputEl.value || '').trim();
       if (!v) { toast('검색어 또는 주소를 입력해주세요.'); return; }
       closeSheet();
-      onConfirm(v);
+      onConfirm(v, null);
     });
 
     bindItems();
@@ -1170,8 +1177,33 @@ const obitsCol = collection(db, 'obituaries');
   function navigate(route, params = {}) {
     state.route = route;
     state.params = params;
+    const hash = hashFromRoute(route, params);
+    const target = hash || location.pathname + location.search;
+    if ((location.hash || '') !== hash) {
+      try { history.pushState(null, '', target); } catch { }
+    }
     render();
     window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  // ---------- Hash routing helpers ----------
+  const HASH_ROUTES_WITH_ID = new Set(['detail', 'edit', 'messages', 'message-write']);
+  const HASH_ROUTES_NO_ID = new Set(['landing', 'my', 'create', 'preview', 'ended', 'privacy', 'terms']);
+
+  function hashFromRoute(route, params) {
+    if (!route || route === 'landing') return '';
+    if (HASH_ROUTES_WITH_ID.has(route) && params?.id) return `#${route}/${params.id}`;
+    if (HASH_ROUTES_NO_ID.has(route)) return `#${route}`;
+    return '';
+  }
+
+  function routeFromHash(hash) {
+    const h = (hash || '').replace(/^#\/?/, '');
+    if (!h) return { route: 'landing', params: {} };
+    const [route, id] = h.split('/');
+    if (HASH_ROUTES_WITH_ID.has(route) && id) return { route, params: { id } };
+    if (HASH_ROUTES_NO_ID.has(route)) return { route, params: {} };
+    return { route: 'landing', params: {} };
   }
 
   function setHeader({ title, back = false, menu = true, saveDraft = false, activeId = null }) {
@@ -1763,7 +1795,18 @@ const obitsCol = collection(db, 'obituaries');
           openAddressSearchSheet({
             title: '장례식장 검색',
             value: d.funeral.funeralHome,
-            onConfirm: (v) => { d.funeral.funeralHome = v; renderEditor(); }
+            onConfirm: (v, item) => {
+              d.funeral.funeralHome = v;
+              d.funeral.funeralHomeData = item ? {
+                name: item.fcltNm || '',
+                addr: item.addr || '',
+                telno: item.telno || '',
+                homepageUrl: item.homepageUrl || '',
+                ctpv: item.ctpv || '',
+                sigungu: item.sigungu || '',
+              } : null;
+              renderEditor();
+            }
           });
         }
       });
@@ -1934,11 +1977,85 @@ const obitsCol = collection(db, 'obituaries');
     cur[keys[keys.length - 1]] = v;
   }
 
+  // ---------- Kakao Maps ----------
+  let kakaoMapsPromise = null;
+  function loadKakaoMaps() {
+    if (kakaoMapsPromise) return kakaoMapsPromise;
+    kakaoMapsPromise = new Promise((resolve, reject) => {
+      if (!window.kakao?.maps) { reject(new Error('Kakao SDK not present')); return; }
+      if (window.kakao.maps.services) { resolve(window.kakao); return; }
+      window.kakao.maps.load(() => resolve(window.kakao));
+    });
+    return kakaoMapsPromise;
+  }
+
+  async function initFuneralMaps(root) {
+    const containers = (root || document).querySelectorAll('[data-kakao-map]:not([data-kakao-ready])');
+    if (!containers.length) return;
+    let kakao;
+    try {
+      kakao = await loadKakaoMaps();
+    } catch (e) {
+      console.warn('[kakao-maps] SDK load failed', e);
+      containers.forEach(el => {
+        el.setAttribute('data-kakao-ready', 'error');
+        el.innerHTML = '<div class="venue__map-msg">지도를 불러올 수 없습니다.</div>';
+      });
+      return;
+    }
+    const geocoder = new kakao.maps.services.Geocoder();
+    const places = new kakao.maps.services.Places();
+
+    containers.forEach(el => {
+      const addr = el.dataset.addr || '';
+      const name = el.dataset.name || '';
+      const cleanAddr = addr.replace(/\s*\([^)]*\)/g, '').trim();
+
+      const resolveLocation = () =>
+        new Promise(res => {
+          if (!cleanAddr) return res(null);
+          geocoder.addressSearch(cleanAddr, (result, status) => {
+            if (status === kakao.maps.services.Status.OK && result[0]) return res(result[0]);
+            if (!name) return res(null);
+            places.keywordSearch(name, (r2, s2) => {
+              if (s2 === kakao.maps.services.Status.OK && r2[0]) {
+                res({ x: r2[0].x, y: r2[0].y });
+              } else {
+                res(null);
+              }
+            });
+          });
+        });
+
+      resolveLocation().then(loc => {
+        el.setAttribute('data-kakao-ready', loc ? '1' : 'notfound');
+        if (!loc) {
+          el.innerHTML = '<div class="venue__map-msg">지도 위치를 찾을 수 없습니다.</div>';
+          return;
+        }
+        const latlng = new kakao.maps.LatLng(Number(loc.y), Number(loc.x));
+        el.innerHTML = '';
+        const map = new kakao.maps.Map(el, { center: latlng, level: 4, draggable: true });
+        new kakao.maps.Marker({ position: latlng, map });
+        kakao.maps.event.addListener(map, 'click', () => {
+          const q = encodeURIComponent(name || cleanAddr);
+          window.open(`https://map.kakao.com/link/map/${q},${loc.y},${loc.x}`, '_blank', 'noopener');
+        });
+        setTimeout(() => {
+          map.relayout();
+          map.setCenter(latlng);
+        }, 50);
+      });
+    });
+  }
+
   // ---------- Preview ----------
   function renderPreview() {
+    if (!state.draft) { navigate('create'); return; }
     setHeader({ title: '부고장 미리보기', back: true, menu: false });
     const d = state.draft;
     viewEl.innerHTML = obituaryHTML(d, { preview: true });
+    initFuneralMaps(viewEl);
     viewEl.insertAdjacentHTML('beforeend', `
       <div class="bottom-cta bottom-cta--two">
         <button class="btn btn--secondary" id="btnEdit">편집하기</button>
@@ -1967,6 +2084,7 @@ const obitsCol = collection(db, 'obituaries');
     if (o.status === 'ended') return navigate('ended');
 
     viewEl.innerHTML = obituaryHTML(o, { preview: false });
+    initFuneralMaps(viewEl);
     viewEl.insertAdjacentHTML('beforeend', `
       <div class="bottom-cta bottom-cta--two">
         <button class="btn btn--secondary" id="btnFlower">헌화하기</button>
@@ -2029,15 +2147,33 @@ const obitsCol = collection(db, 'obituaries');
             </dl>
           </section>
 
-          ${f.funeralHome ? `
+          ${f.funeralHome ? (() => {
+            const h = f.funeralHomeData;
+            const name = h?.name || f.funeralHome;
+            const addr = h?.addr || '';
+            const tel = h?.telno || '';
+            const hp = h?.homepageUrl || '';
+            const mapQuery = encodeURIComponent(h ? `${h.name} ${h.addr}`.trim() : f.funeralHome);
+            const kakaoMapUrl = `https://map.kakao.com/link/search/${mapQuery}`;
+            return `
             <section class="card">
-              <div class="card__title"><span class="ico">⚘</span>빈소</div>
-              <div class="def-list">${escapeHtml(f.funeralHome)}</div>
-              <div class="copy-row" style="margin-top:6px;">
-                <button data-copy="${escapeHtml(f.funeralHome)}">주소 복사</button>
+              <div class="card__title"><span class="ico">⚘</span>장례식장</div>
+              <div class="venue">
+                <div class="venue__name">${escapeHtml(name)}</div>
+                ${addr ? `<div class="venue__addr">${escapeHtml(addr)}</div>` : ''}
+                ${tel ? `<div class="venue__tel">${escapeHtml(tel)}</div>` : ''}
+                ${hp ? `<div class="venue__hp"><a href="${/^https?:\/\//.test(hp) ? escapeHtml(hp) : 'https://' + escapeHtml(hp)}" target="_blank" rel="noreferrer noopener">홈페이지</a></div>` : ''}
+              </div>
+              <div class="venue__map" data-kakao-map data-addr="${escapeHtml(addr || f.funeralHome || '')}" data-name="${escapeHtml(name)}">
+                <div class="venue__map-msg">지도 불러오는 중…</div>
+              </div>
+              <div class="venue__actions">
+                ${addr ? `<button class="venue__btn" data-copy="${escapeHtml(addr)}" data-toast="주소가 복사되었습니다.">주소 복사</button>` : `<button class="venue__btn" data-copy="${escapeHtml(f.funeralHome)}" data-toast="주소가 복사되었습니다.">주소 복사</button>`}
+                ${tel ? `<a class="venue__btn" href="tel:${escapeHtml(tel.replace(/[^0-9+]/g, ''))}">전화걸기</a>` : ''}
+                <a class="venue__btn" href="${kakaoMapUrl}" target="_blank" rel="noreferrer noopener">카카오맵</a>
               </div>
             </section>
-          `: ''}
+          `;})() : ''}
 
           ${o.notice ? `
             <section class="card">
@@ -2241,19 +2377,17 @@ const obitsCol = collection(db, 'obituaries');
     `;
   }
 
-  // ---------- URL hash routing (for shared links) ----------
+  // ---------- URL hash routing ----------
   function syncFromHash() {
-    const hash = location.hash.slice(1);
-    if (!hash) return false;
-    const [route, ...rest] = hash.split('/');
-    if (route === 'detail' && rest[0]) {
-      navigate('detail', { id: rest[0] });
-      return true;
-    }
-    return false;
+    const { route, params } = routeFromHash(location.hash);
+    state.route = route;
+    state.params = params;
+    render();
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
+  window.addEventListener('popstate', syncFromHash);
   window.addEventListener('hashchange', syncFromHash);
 
   // ---------- Boot ----------
-  if (!syncFromHash()) renderLanding();
+  syncFromHash();
 })();

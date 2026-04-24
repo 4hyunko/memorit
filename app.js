@@ -80,7 +80,7 @@ const obitsCol = collection(db, 'obituaries');
           await setDoc(doc(obitsCol, obit.id), plain);
         } catch (e) {
           console.error('Firestore upsert failed', e);
-          toast('저장 중 오류가 발생했습니다.');
+          toast('다시 시도해주세요.');
         }
       })();
       return obit;
@@ -90,7 +90,7 @@ const obitsCol = collection(db, 'obituaries');
       removeLocalPhoto(id);
       deleteDoc(doc(obitsCol, id)).catch((e) => {
         console.error('Firestore delete failed', e);
-        toast('삭제 중 오류가 발생했습니다.');
+        toast('다시 시도해주세요.');
       });
     }
   };
@@ -105,7 +105,7 @@ const obitsCol = collection(db, 'obituaries');
     if (['landing', 'my', 'detail'].includes(state.route)) render();
   }, (err) => {
     console.error('Firestore subscribe failed', err);
-    toast('데이터를 불러오지 못했습니다.');
+    toast('다시 시도해주세요.');
   });
 
   const session = {
@@ -216,6 +216,11 @@ const obitsCol = collection(db, 'obituaries');
         place: '', // 5-e 장지
         funeralHome: '', // 장례식장 (표시용 요약 문자열)
         funeralHomeData: null, // 장례식장 구조화 데이터 { name, addr, telno, homepageUrl, ctpv, sigungu }
+        funeralHomeMode: 'search', // 'search' | 'manual'
+        funeralHomeName: '',
+        funeralHomeAddr: '',
+        funeralHomePhone: '',
+        funeralHomeRoom: '',
         showAll: true,
       },
       // 알리는 글
@@ -430,7 +435,7 @@ const obitsCol = collection(db, 'obituaries');
     return funeralAllCache;
   }
 
-  function openAddressSearchSheet({ title = '장례식장 검색', value, onConfirm }) {
+  function openAddressSearchSheet({ title = '장례식장 검색', value, onConfirm, mode = 'funeral' }) {
     let allItems = [];
     let loading = true;
     let errorMsg = '';
@@ -488,17 +493,31 @@ const obitsCol = collection(db, 'obituaries');
       if (errorMsg) return `<div class="search-empty">${escapeHtml(errorMsg)}</div>`;
       const { list, slice } = computeView();
       if (list.length === 0) {
-        return `<div class="search-empty">검색 결과가 없습니다.<br/>다른 키워드로 시도해주세요.</div>`;
+        return `
+          <div class="search-empty">
+            <div>검색 결과가 없습니다.</div>
+            <div style="font-size:12px;color:var(--c-text-3);margin-top:4px;">다른 키워드로 시도하거나 직접 입력해주세요.</div>
+            <button type="button" class="btn btn--secondary" id="asEmptyManual" style="margin-top:12px;">직접 입력하기</button>
+          </div>
+        `;
       }
-      return slice.map((it, i) => {
+      return slice.map((it) => {
         const name = it.fcltNm || '-';
         const addr = it.addr || '';
+        const full = addr ? `${name} (${addr})` : name;
+        const primary = mode === 'address' ? addr || name : name;
+        const secondary = mode === 'address' ? (name && name !== '-' ? name : '') : addr;
+        const tagLabel = mode === 'address' ? '도로명' : '';
         return `
-          <button type="button" class="item" data-addr="1" data-idx="${i}">
-            <div class="addr-name">${escapeHtml(name)}</div>
-            <div class="road">${it.gubun ? `<span class="zip-chip">${escapeHtml(it.gubun)}</span>` : ''}${escapeHtml(addr)}</div>
-            ${it.telno ? `<div class="jibun"><span class="tag">전화</span>${escapeHtml(it.telno)}</div>` : ''}
-          </button>
+          <div class="search-item" data-addr="${escapeHtml(full)}" data-name="${escapeHtml(name)}" data-addr-only="${escapeHtml(addr)}" data-phone="${escapeHtml(it.telno || '')}" data-telno="${escapeHtml(it.telno || '')}" data-homepage="${escapeHtml(it.homepageUrl || '')}" data-ctpv="${escapeHtml(it.ctpv || '')}" data-sigungu="${escapeHtml(it.sigungu || '')}">
+            <div class="search-item__info">
+              <div class="addr-name">${tagLabel ? `<span class="zip-chip">${tagLabel}</span>` : ''}${escapeHtml(primary)}</div>
+              ${secondary ? `<div class="road">${escapeHtml(secondary)}</div>` : ''}
+              ${mode !== 'address' && it.telno ? `<div class="jibun"><span class="tag">전화</span>${escapeHtml(it.telno)}</div>` : ''}
+            </div>
+            <button type="button" class="search-item__btn" data-select>선택</button>
+          </div>
+
         `;
       }).join('');
     };
@@ -522,18 +541,31 @@ const obitsCol = collection(db, 'obituaries');
     };
 
     const bindItems = () => {
-      document.querySelectorAll('#asResults [data-idx]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const idx = Number(btn.dataset.idx);
-          const { slice } = computeView();
-          const item = slice[idx];
-          if (!item) return;
-          const name = item.fcltNm || '';
-          const addr = item.addr || '';
-          const display = addr ? `${name} (${addr})` : name;
+      document.querySelectorAll('#asResults .search-item').forEach(row => {
+        const selectBtn = row.querySelector('[data-select]');
+        const trigger = (ev) => {
+          ev?.stopPropagation?.();
           closeSheet();
-          onConfirm(display, item);
-        });
+          const name = row.dataset.name || '';
+          const addr = row.dataset.addrOnly || '';
+          const display = row.dataset.addr || (addr ? `${name} (${addr})` : name);
+          onConfirm(display, {
+            name,
+            addr,
+            phone: row.dataset.phone || '',
+            fcltNm: name,
+            telno: row.dataset.telno || row.dataset.phone || '',
+            homepageUrl: row.dataset.homepage || '',
+            ctpv: row.dataset.ctpv || '',
+            sigungu: row.dataset.sigungu || ''
+          });
+        };
+        selectBtn?.addEventListener('click', trigger);
+        row.addEventListener('click', (e) => { if (e.target === selectBtn) return; trigger(e); });
+      });
+      document.querySelector('#asEmptyManual')?.addEventListener('click', () => {
+        closeSheet();
+        onConfirm('', { name: '', addr: '', phone: '', switchToManual: true });
       });
     };
 
@@ -551,20 +583,18 @@ const obitsCol = collection(db, 'obituaries');
       });
     };
 
+    const placeholder = mode === 'address' ? '도로명 또는 지번으로 검색' : '장례식장명 또는 주소로 검색';
     openSheet(`
       <div class="sheet-head">
         <div class="sheet-title">${escapeHtml(title)}</div>
         <button class="sheet-close" id="asClose" aria-label="닫기">×</button>
       </div>
       <div class="search-input">
-        <input class="input" id="asInput" placeholder="시설명, 주소로 검색 (전국)" value="${escapeHtml(value || '')}" autocomplete="off" />
+        <input class="input" id="asInput" placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(value || '')}" autocomplete="off" />
       </div>
       <div id="asSummary">${renderSummary()}</div>
       <div class="search-results" id="asResults">${renderResults()}</div>
       <div id="asPagination">${renderFooterPagination()}</div>
-      <div class="sheet-confirm">
-        <button class="btn btn--secondary btn--block" id="asManual">직접 입력하기</button>
-      </div>
     `);
 
     const inputEl = $('#asInput');
@@ -579,12 +609,6 @@ const obitsCol = collection(db, 'obituaries');
     });
 
     $('#asClose').addEventListener('click', closeSheet);
-    $('#asManual').addEventListener('click', () => {
-      const v = (inputEl.value || '').trim();
-      if (!v) { toast('검색어 또는 주소를 입력해주세요.'); return; }
-      closeSheet();
-      onConfirm(v, null);
-    });
 
     bindItems();
     bindPagination();
@@ -606,11 +630,11 @@ const obitsCol = collection(db, 'obituaries');
 
   // 관계 선택 bottom-sheet (Bottomsheet-1 item 2)
   const RELATION_GROUPS = [
-    { key: '자녀-배우자', subs: ['아들', '며느리', '딸', '사위', '남편', '아내'] },
-    { key: '부모', subs: ['아버지', '어머니', '시아버지', '시어머니', '장인', '장모'] },
-    { key: '형제·자매', subs: ['형', '오빠', '누나', '언니', '남동생', '여동생'] },
-    { key: '친척', subs: ['조카', '손자', '손녀', '사촌', '삼촌', '이모', '고모', '외삼촌'] },
-    { key: '친구·지인', subs: ['친구', '선배', '후배', '동료', '지인'] },
+    { key: '자녀 및 배우자', subs: ['배우자', '아들', '딸', '며느리', '사위'] },
+    { key: '손자녀', subs: ['손자', '손녀', '외손자', '외손녀', '손부 (손자의 아내)', '손서 (손녀의 남편)', '외손부 (외손자의 아내)', '외손서 (외손녀의 남편)'] },
+    { key: '형제자매', subs: ['형', '오빠', '누나', '언니', '남동생', '여동생'] },
+    { key: '부모 및 친척', subs: ['부', '모', '고모', '이모', '백부', '백모', '숙부', '숙모', '조부', '조모'] },
+    { key: '형제의 배우자', subs: ['형수', '제수', '매형', '매제'] },
   ];
   const RELATION_SUB_TO_GROUP = (() => {
     const m = new Map();
@@ -1234,7 +1258,7 @@ const obitsCol = collection(db, 'obituaries');
     d.status = 'draft';
     d.updatedAt = new Date().toISOString();
     storage.upsert(d);
-    toast('임시 저장이 완료되었어요');
+    toast('저장되었습니다.');
     navigate('my');
   });
 
@@ -1288,7 +1312,7 @@ const obitsCol = collection(db, 'obituaries');
 
   // ---------- Landing ----------
   function renderLanding() {
-    setHeader({ title: null, back: false, menu: true });
+    setHeader({ title: null, back: false, menu: false });
     state.draft = null;
     state.activeObituaryId = null;
     state.authedPhone = '';
@@ -1484,14 +1508,52 @@ const obitsCol = collection(db, 'obituaries');
           <div class="section__head">
             <div class="section__title"><span class="icon-bullet">⚘</span>장례식장</div>
           </div>
-          <div class="field">
-            <label class="field__label">빈소</label>
-            <button type="button" class="picker-input ${d.funeral.funeralHome ? '' : 'picker-input--placeholder'}" data-pick-funeral="funeralHome">
-              <span>${d.funeral.funeralHome ? escapeHtml(d.funeral.funeralHome) : '장례식장을 검색해주세요'}</span>
-              <span class="picker-input__chevron">⌄</span>
-            </button>
-            <div class="field__help">* 미입력 시 빈소 정보가 부고장에 노출되지 않습니다.</div>
-          </div>
+          <div class="section__notice">장례식장 검색 시 주소와 연락처가 자동 입력됩니다. 목록에 없으면 직접 입력해 주세요.</div>
+          ${d.funeral.funeralHomeMode === 'manual' ? `
+            <div class="field">
+              <label class="field__label">주소</label>
+              <button type="button" class="picker-input ${d.funeral.funeralHomeAddr ? '' : 'picker-input--placeholder'}" data-pick-funeral="addressSearch">
+                <span>${d.funeral.funeralHomeAddr ? escapeHtml(d.funeral.funeralHomeAddr) : '주소를 검색해주세요'}</span>
+                <span class="picker-input__chevron">⌄</span>
+              </button>
+            </div>
+            <div class="field">
+              <label class="field__label">장례식장 이름</label>
+              <input class="input" id="fhNameInput" data-bind="funeral.funeralHomeName" value="${escapeHtml(d.funeral.funeralHomeName)}" placeholder="장례식장 이름을 입력해주세요" ${d.funeral.funeralHomeAddr ? '' : 'disabled'} />
+            </div>
+            <div class="field">
+              <label class="field__label">전화번호</label>
+              <input class="input" type="tel" inputmode="numeric" id="fhPhoneInput" data-bind="funeral.funeralHomePhone" value="${escapeHtml(d.funeral.funeralHomePhone)}" placeholder="02-1234-5678" ${d.funeral.funeralHomeAddr ? '' : 'disabled'} />
+            </div>
+            <div class="field">
+              <label class="field__label">호실</label>
+              <input class="input" data-bind="funeral.funeralHomeRoom" value="${escapeHtml(d.funeral.funeralHomeRoom)}" placeholder="호실을 입력해주세요" />
+            </div>
+          ` : `
+            <div class="field">
+              <label class="field__label">장례식장</label>
+              <button type="button" class="picker-input ${d.funeral.funeralHomeName ? '' : 'picker-input--placeholder'}" data-pick-funeral="funeralHome">
+                <span>${d.funeral.funeralHomeName ? escapeHtml(d.funeral.funeralHomeName) : '장례식장을 검색해주세요'}</span>
+                <span class="picker-input__chevron">⌄</span>
+              </button>
+            </div>
+            ${d.funeral.funeralHomeName ? `
+              <div class="fh-info">
+                ${d.funeral.funeralHomeAddr ? `<div class="fh-info__row"><span class="fh-info__label">주소</span>${escapeHtml(d.funeral.funeralHomeAddr)}</div>` : ''}
+                ${d.funeral.funeralHomePhone ? `<div class="fh-info__row"><span class="fh-info__label">전화</span>${escapeHtml(d.funeral.funeralHomePhone)}</div>` : ''}
+              </div>
+            ` : ''}
+            <div class="field">
+              <label class="field__label">호실</label>
+              <input class="input" data-bind="funeral.funeralHomeRoom" value="${escapeHtml(d.funeral.funeralHomeRoom)}" placeholder="호실을 입력해주세요" ${d.funeral.funeralHomeName ? '' : 'disabled'} />
+            </div>
+          `}
+          <label class="checkbox" style="margin-top:14px;">
+            <input type="checkbox" id="fhManualChk" ${d.funeral.funeralHomeMode === 'manual' ? 'checked' : ''}>
+            <span class="checkbox__box"></span>
+            <span>직접 입력하기</span>
+          </label>
+          <div class="field__help">* 미입력 시 장례식장 정보가 부고장에 노출되지 않습니다.</div>
         </section>
 
         <!-- 장례 일정 -->
@@ -1794,17 +1856,40 @@ const obitsCol = collection(db, 'obituaries');
         } else if (kind === 'funeralHome') {
           openAddressSearchSheet({
             title: '장례식장 검색',
-            value: d.funeral.funeralHome,
-            onConfirm: (v, item) => {
-              d.funeral.funeralHome = v;
+            mode: 'funeral',
+            value: d.funeral.funeralHomeName || d.funeral.funeralHome,
+            onConfirm: (label, item) => {
+              if (item?.switchToManual) {
+                d.funeral.funeralHomeMode = 'manual';
+                renderEditor();
+                return;
+              }
+              d.funeral.funeralHomeName = item?.name || label;
+              d.funeral.funeralHomeAddr = item?.addr || '';
+              d.funeral.funeralHomePhone = item?.phone || item?.telno || '';
+              d.funeral.funeralHome = label;
               d.funeral.funeralHomeData = item ? {
-                name: item.fcltNm || '',
+                name: item.fcltNm || item.name || '',
                 addr: item.addr || '',
-                telno: item.telno || '',
+                telno: item.telno || item.phone || '',
                 homepageUrl: item.homepageUrl || '',
                 ctpv: item.ctpv || '',
                 sigungu: item.sigungu || '',
               } : null;
+              renderEditor();
+            }
+          });
+        } else if (kind === 'addressSearch') {
+          openAddressSearchSheet({
+            title: '주소 검색',
+            mode: 'address',
+            value: d.funeral.funeralHomeAddr,
+            onConfirm: (label, item) => {
+              if (item?.switchToManual) return;
+              d.funeral.funeralHomeAddr = item?.addr || label;
+              if (item?.name) d.funeral.funeralHomeName = item.name;
+              if (item?.phone || item?.telno) d.funeral.funeralHomePhone = item.phone || item.telno;
+              d.funeral.funeralHome = label;
               renderEditor();
             }
           });
@@ -1879,9 +1964,17 @@ const obitsCol = collection(db, 'obituaries');
       host.innerHTML = list.map((t, i, arr) => titleRow(t, i, arr.length)).join('');
       // rebind only the new rows
       host.querySelectorAll('[data-bind-arr]').forEach((el) => {
-        el.addEventListener('input', () => {
+        let composing = false;
+        el.addEventListener('compositionstart', () => { composing = true; });
+        el.addEventListener('compositionend', () => {
+          composing = false;
           setByPath(d, el.dataset.bindArr, el.value);
-          refreshTitles();
+          maybeRefreshOnInput(el);
+        });
+        el.addEventListener('input', () => {
+          if (composing) return;
+          setByPath(d, el.dataset.bindArr, el.value);
+          maybeRefreshOnInput(el);
         });
       });
       host.querySelectorAll('[data-remove="title"]').forEach((b) => {
@@ -1897,6 +1990,15 @@ const obitsCol = collection(db, 'obituaries');
         const next = host.querySelector(`[data-title-input="${focusIdx}"]`);
         if (next) { next.focus(); try { next.setSelectionRange(caret, caret); } catch { } }
       }
+    };
+    // Refresh DOM only when trash-button visibility for single-row case toggles
+    const maybeRefreshOnInput = (el) => {
+      const list = d.deceased.titles || [''];
+      if (list.length !== 1) return;
+      const row = el.closest('[data-row="title"]');
+      const hasTrash = !!row?.querySelector('[data-remove="title"]');
+      const shouldHaveTrash = !!(list[0] && list[0].trim());
+      if (hasTrash !== shouldHaveTrash) refreshTitles();
     };
     $('#addTitle')?.addEventListener('click', () => {
       if (!d.deceased.titles) d.deceased.titles = [''];
@@ -1919,6 +2021,12 @@ const obitsCol = collection(db, 'obituaries');
         d.mourners.splice(+b.dataset.i, 1);
         renderEditor();
       });
+    });
+
+    // 장례식장 모드 토글 (체크박스)
+    $('#fhManualChk')?.addEventListener('change', (e) => {
+      d.funeral.funeralHomeMode = e.target.checked ? 'manual' : 'search';
+      renderEditor();
     });
 
     // donations
@@ -1949,7 +2057,7 @@ const obitsCol = collection(db, 'obituaries');
       d.status = 'active';
       d.updatedAt = new Date().toISOString();
       storage.upsert(d);
-      toast('부고장이 등록되었습니다.');
+      toast('저장되었습니다.');
       navigate('my');
     });
   }
@@ -2145,12 +2253,15 @@ const obitsCol = collection(db, 'obituaries');
             </div>
           </section>
 
-          ${o.mourners.length ? `
+          ${o.mourners.length || o.notice ? `
             <section class="card">
-              <div class="card__title"><span class="ico">⚘</span>상주</div>
-              <dl class="def-list">
-                ${o.mourners.map(m => `<div class="row"><dt>${escapeHtml(m.relation || '')}</dt><dd>${escapeHtml(m.name || '')}</dd></div>`).join('')}
-              </dl>
+              <div class="card__title"><span class="ico">⚘</span>상주 정보</div>
+              ${o.mourners.length ? `
+                <dl class="def-list">
+                  ${o.mourners.map(m => `<div class="row"><dt>${escapeHtml(m.relation || '')}</dt><dd>${escapeHtml(m.name || '')}</dd></div>`).join('')}
+                </dl>
+              ` : ''}
+              ${o.notice ? `<div class="message-block mourner-notice">${escapeHtml(o.notice)}</div>` : ''}
             </section>
           `: ''}
 
@@ -2164,40 +2275,34 @@ const obitsCol = collection(db, 'obituaries');
             </dl>
           </section>
 
-          ${f.funeralHome ? (() => {
+          ${(f.funeralHomeName || f.funeralHomeAddr || f.funeralHome) ? (() => {
             const h = f.funeralHomeData;
-            const name = h?.name || f.funeralHome;
-            const addr = h?.addr || '';
-            const tel = h?.telno || '';
+            const name = f.funeralHomeName || h?.name || f.funeralHome;
+            const addr = f.funeralHomeAddr || h?.addr || '';
+            const tel = f.funeralHomePhone || h?.telno || '';
             const hp = h?.homepageUrl || '';
-            const mapQuery = encodeURIComponent(h ? `${h.name} ${h.addr}`.trim() : f.funeralHome);
+            const room = f.funeralHomeRoom || '';
+            const mapQuery = encodeURIComponent(addr || name || f.funeralHome);
             const kakaoMapUrl = `https://map.kakao.com/link/search/${mapQuery}`;
             return `
             <section class="card">
               <div class="card__title"><span class="ico">⚘</span>장례식장</div>
               <div class="venue">
-                <div class="venue__name">${escapeHtml(name)}</div>
+                <div class="venue__name">${escapeHtml(name)}${room ? ` · ${escapeHtml(room)}` : ''}</div>
                 ${addr ? `<div class="venue__addr">${escapeHtml(addr)}</div>` : ''}
                 ${tel ? `<div class="venue__tel">${escapeHtml(tel)}</div>` : ''}
                 ${hp ? `<div class="venue__hp"><a href="${/^https?:\/\//.test(hp) ? escapeHtml(hp) : 'https://' + escapeHtml(hp)}" target="_blank" rel="noreferrer noopener">홈페이지</a></div>` : ''}
               </div>
-              <div class="venue__map" data-kakao-map data-addr="${escapeHtml(addr || f.funeralHome || '')}" data-name="${escapeHtml(name)}">
+              ${addr ? `<div class="venue__map" data-kakao-map data-addr="${escapeHtml(addr)}" data-name="${escapeHtml(name)}">
                 <div class="venue__map-msg">지도 불러오는 중…</div>
-              </div>
+              </div>` : ''}
               <div class="venue__actions">
-                ${addr ? `<button class="venue__btn" data-copy="${escapeHtml(addr)}" data-toast="주소가 복사되었습니다.">주소 복사</button>` : `<button class="venue__btn" data-copy="${escapeHtml(f.funeralHome)}" data-toast="주소가 복사되었습니다.">주소 복사</button>`}
-                ${tel ? `<a class="venue__btn" href="tel:${escapeHtml(tel.replace(/[^0-9+]/g, ''))}">전화걸기</a>` : ''}
-                <a class="venue__btn" href="${kakaoMapUrl}" target="_blank" rel="noreferrer noopener">카카오맵</a>
+                ${(addr || f.funeralHome) ? `<button type="button" class="text-btn" data-copy="${escapeHtml(addr || f.funeralHome)}" data-toast="주소가 복사되었습니다.">주소 복사</button>` : ''}
+                ${tel ? `<a class="text-btn" href="tel:${escapeHtml(tel.replace(/[^0-9+]/g, ''))}">전화걸기</a>` : ''}
+                ${addr ? `<a class="text-btn" href="${kakaoMapUrl}" target="_blank" rel="noreferrer noopener">카카오맵</a>` : ''}
               </div>
             </section>
           `;})() : ''}
-
-          ${o.notice ? `
-            <section class="card">
-              <div class="card__title"><span class="ico">⚘</span>알리는 글</div>
-              <div class="message-block">${escapeHtml(o.notice)}</div>
-            </section>
-          `: ''}
 
           ${!o.noDonation && o.donations.some(x => x.bank || x.account) ? `
             <section class="card">
@@ -2209,8 +2314,7 @@ const obitsCol = collection(db, 'obituaries');
                   </div>
                   <div class="copy-row">
                     <span class="label">${escapeHtml(x.bank || '')}</span>
-                    <span>${escapeHtml(x.account || '')}</span>
-                    <button data-copy="${escapeHtml(x.account || '')}" data-toast="계좌 번호가 복사되었습니다.">복사</button>
+                    ${x.account ? `<button type="button" class="text-btn text-btn--inline" data-copy="${escapeHtml(x.account)}" data-toast="계좌 번호가 복사되었습니다.">${escapeHtml(x.account)}</button>` : ''}
                   </div>
                 </div>
               `).join('')}
@@ -2251,7 +2355,22 @@ const obitsCol = collection(db, 'obituaries');
     const copy = e.target.closest('[data-copy]');
     if (copy) {
       const v = copy.dataset.copy;
-      navigator.clipboard?.writeText(v).then(() => toast(copy.dataset.toast || '복사되었습니다.'));
+      const msg = copy.dataset.toast || '복사되었습니다.';
+      const done = () => toast(msg);
+      const fallback = () => {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = v; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch {}
+        done();
+      };
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(v).then(done, fallback);
+      } else {
+        fallback();
+      }
     }
     const goMsg = e.target.closest('#goMessages');
     if (goMsg) navigate('messages', { id: state.activeObituaryId });

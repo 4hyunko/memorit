@@ -1616,6 +1616,51 @@ img {
 }
 
 /* Share buttons */
+.share-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  background: #fafafa;
+}
+
+.share-url__text {
+  flex: 1;
+  font-size: 12px;
+  color: var(--c-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+}
+
+.share-url__btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  background: var(--c-text);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.share-url__btn:hover {
+  background: #333;
+}
+
+.share-url__btn.is-done {
+  background: var(--c-success);
+}
+
 .share-list {
   display: flex;
   flex-direction: column;

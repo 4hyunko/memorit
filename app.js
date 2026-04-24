@@ -807,7 +807,7 @@ const obitsCol = collection(db, 'obituaries');
       const isToday = ds === todayStr;
       const isSelected = ds === selected;
       const isFuture = !allowFuture && ds > todayStr;
-      cells.push(`<button type="button" class="calendar__day ${isSelected ? 'is-selected' : ''} ${isToday && !isSelected ? 'is-today' : ''}" data-date="${ds}" ${isFuture ? 'disabled' : ''}>${day}</button>`);
+      cells.push(`<button type="button" class="calendar__day ${isSelected ? 'is-selected' : ''} ${isToday ? 'is-today' : ''}" data-date="${ds}" ${isFuture ? 'disabled' : ''}>${day}</button>`);
     }
     const trailing = (7 - (cells.length % 7)) % 7;
     for (let i = 1; i <= trailing; i++) {
@@ -860,10 +860,10 @@ const obitsCol = collection(db, 'obituaries');
         render();
       });
       sheetPanel.querySelector('#dpReset').addEventListener('click', () => {
-        selected = fallback;
-        const def = new Date(selected + 'T00:00');
-        year = def.getFullYear();
-        month = def.getMonth();
+        selected = '';
+        const now = new Date();
+        year = now.getFullYear();
+        month = now.getMonth();
         render();
       });
       sheetPanel.querySelector('#dpClose').addEventListener('click', closeSheet);
@@ -969,13 +969,13 @@ const obitsCol = collection(db, 'obituaries');
         render();
       });
       sheetPanel.querySelector('#dtReset').addEventListener('click', () => {
-        selected = todayStr;
+        selected = '';
         hh = '09'; mm = '00';
         tUndecided = false;
         dUndecided = false;
-        const def = new Date(selected + 'T00:00');
-        year = def.getFullYear();
-        month = def.getMonth();
+        const now = new Date();
+        year = now.getFullYear();
+        month = now.getMonth();
         render();
       });
       sheetPanel.querySelector('#dtClose').addEventListener('click', closeSheet);
@@ -983,6 +983,8 @@ const obitsCol = collection(db, 'obituaries');
         closeSheet();
         if (dUndecided) {
           onConfirm({ iso: '', timeUndecided: false, dateUndecided: true });
+        } else if (!selected) {
+          onConfirm({ iso: '', timeUndecided: false, dateUndecided: false });
         } else {
           const iso = tUndecided ? `${selected}T00:00` : `${selected}T${hh}:${mm}`;
           onConfirm({ iso, timeUndecided: tUndecided, dateUndecided: false });
@@ -1600,7 +1602,6 @@ const obitsCol = collection(db, 'obituaries');
             <span class="checkbox__box"></span>
             <span>직접 입력하기</span>
           </label>
-          <div class="field__help">* 미입력 시 장례식장 정보가 부고장에 노출되지 않습니다.</div>
         </section>
 
         <!-- 장례 일정 -->
@@ -1649,8 +1650,11 @@ const obitsCol = collection(db, 'obituaries');
             <div class="section__title"><span class="icon-bullet">⚘</span>알리는 글</div>
           </div>
           <div class="field">
-            <textarea class="textarea" maxlength="500" data-bind="notice" placeholder="황망한 마음에 일일이 직접 연락드리지 못함을 널리 헤아려주시기 바랍니다.">${escapeHtml(d.notice)}</textarea>
-            <div class="field__counter"><span id="noticeCount">${(d.notice || '').length}</span>/500</div>
+            <textarea class="textarea" maxlength="200" data-bind="notice" placeholder="황망한 마음에 일일이 직접 연락드리지 못함을 널리 헤아려주시기 바랍니다.">${escapeHtml(d.notice)}</textarea>
+            <div class="field__footer">
+              <span class="field__help">* 미작성 시 위의 내용으로 반영됩니다.</span>
+              <span class="field__counter"><span id="noticeCount">${(d.notice || '').length}</span>/200</span>
+            </div>
           </div>
         </section>
 
@@ -1705,7 +1709,7 @@ const obitsCol = collection(db, 'obituaries');
           <label class="checkbox" id="termsCheck">
             <input type="checkbox" id="termsAgree">
             <span class="checkbox__box"></span>
-            <span>개인정보 수집 및 이용에 동의합니다.</span>
+            <span>개인정보 수집 및 이용에 동의합니다.<span class="req">*</span></span>
           </label>
         </section>
       </div>
@@ -1768,7 +1772,7 @@ const obitsCol = collection(db, 'obituaries');
           <button type="button" class="select-trigger ${x.bank ? '' : 'is-placeholder'}" data-pick="bank" data-i="${i}">
             <span>${escapeHtml(x.bank || '은행*')}</span><span class="chev">▾</span>
           </button>
-          <input class="input" data-bind-arr="donations.${i}.account" value="${escapeHtml(x.account || '')}" placeholder="계좌번호*" inputmode="numeric" required />
+          <input class="input" type="tel" data-bind-arr="donations.${i}.account" data-digits-only data-max-digits="14" maxlength="14" value="${escapeHtml(x.account || '')}" placeholder="계좌번호*" inputmode="numeric" pattern="[0-9]*" required />
         </div>
       </div>
     `;
@@ -1827,6 +1831,12 @@ const obitsCol = collection(db, 'obituaries');
     });
     viewEl.querySelectorAll('[data-bind-arr]').forEach((el) => {
       el.addEventListener('input', () => {
+        if (el.hasAttribute('data-digits-only')) {
+          let digits = (el.value || '').replace(/\D/g, '');
+          const maxDigits = Number(el.dataset.maxDigits) || 0;
+          if (maxDigits > 0) digits = digits.slice(0, maxDigits);
+          el.value = digits;
+        }
         setByPath(d, el.dataset.bindArr, el.value);
         if (el.dataset.titleInput !== undefined) refreshTitles();
       });
@@ -2103,6 +2113,7 @@ const obitsCol = collection(db, 'obituaries');
     $('#btnComplete').addEventListener('click', () => {
       const err = validate(d);
       if (err) { toast(err); return; }
+      if (!$('#termsAgree')?.checked) { toast('필수항목을 다시 확인해주세요.'); return; }
       // 해시되기 전 raw 비밀번호를 캡처해서 자동 인증에 사용
       const rawPw = !isHashed(d.password) ? (d.password || '') : '';
       if (!d.password && state.editOriginalPasswordHash) d.password = state.editOriginalPasswordHash;
@@ -2326,7 +2337,7 @@ const obitsCol = collection(db, 'obituaries');
             <div class="card__title"><span class="ico">⚘</span>장례 일정</div>
             <dl class="def-list">
               <div class="row"><dt>${escapeHtml(f.deathTerm || '별세')}일</dt><dd>${fmtDate(f.deathAt?.slice(0, 10))}</dd></div>
-              ${f.encoffinAt ? `<div class="row"><dt>입관일시</dt><dd>${f.encoffinTimeUndecided ? fmtDate(f.encoffinAt.slice(0, 10)) : fmtDateTime(f.encoffinAt)}</dd></div>` : ''}
+              <div class="row"><dt>입관일시</dt><dd>${f.encoffinAt ? (f.encoffinTimeUndecided ? fmtDate(f.encoffinAt.slice(0, 10)) : fmtDateTime(f.encoffinAt)) : '미정'}</dd></div>
               <div class="row"><dt>발인일시</dt><dd>${f.carryDateUndecided ? '미정' : (f.carryAt ? (f.carryTimeUndecided ? fmtDate(f.carryAt.slice(0, 10)) : fmtDateTime(f.carryAt)) : '미정')}</dd></div>
               <div class="row"><dt>장지</dt><dd>${f.place ? escapeHtml(f.place) : '미정'}</dd></div>
             </dl>
@@ -2339,15 +2350,25 @@ const obitsCol = collection(db, 'obituaries');
             const tel = f.funeralHomePhone || h?.telno || '';
             const hp = h?.homepageUrl || '';
             const room = f.funeralHomeRoom || '';
-            const addrCopy = addr || f.funeralHome || '';
-            const telDigits = tel.replace(/[^0-9+]/g, '');
+            const addrForCopy = addr || f.funeralHome || '';
             return `
             <section class="card">
               <div class="card__title"><span class="ico">⚘</span>장례식장</div>
               <div class="venue">
                 <div class="venue__name">${escapeHtml(name)}${room ? ` · ${escapeHtml(room)}` : ''}</div>
-                ${addr ? `<button type="button" class="venue__addr venue__link" data-copy="${escapeHtml(addrCopy)}" data-toast="주소가 복사되었습니다.">${escapeHtml(addr)}</button>` : ''}
-                ${tel ? `<a class="venue__tel venue__link" href="tel:${escapeHtml(telDigits)}" data-copy="${escapeHtml(tel)}" data-toast="전화번호가 복사되었습니다.">${escapeHtml(tel)}</a>` : ''}
+                ${addrForCopy ? `
+                  <div class="venue__row">
+                    <span class="venue__addr">${escapeHtml(addrForCopy)}</span>
+                    <button type="button" class="icon-btn" aria-label="주소 복사" data-copy="${escapeHtml(addrForCopy)}" data-toast="주소가 복사되었습니다.">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+                    </button>
+                  </div>
+                ` : ''}
+                ${tel ? `
+                  <div class="venue__row">
+                    <a class="text-btn text-btn--inline" href="tel:${escapeHtml(tel.replace(/[^0-9+]/g, ''))}">${escapeHtml(tel)}</a>
+                  </div>
+                ` : ''}
                 ${hp ? `<div class="venue__hp"><a href="${/^https?:\/\//.test(hp) ? escapeHtml(hp) : 'https://' + escapeHtml(hp)}" target="_blank" rel="noreferrer noopener">홈페이지</a></div>` : ''}
               </div>
               ${addr ? `<div class="venue__map" data-kakao-map data-addr="${escapeHtml(addr)}" data-name="${escapeHtml(name)}">
@@ -2360,14 +2381,24 @@ const obitsCol = collection(db, 'obituaries');
             <section class="card">
               <div class="card__title"><span class="ico">⚘</span>마음을 전하는 곳</div>
               ${o.donations.filter(x => x.bank || x.account).map(x => `
-                <div style="margin-bottom:10px;">
-                  <div style="font-size:13px;color:var(--c-text-2);">
-                    ${escapeHtml(x.relation || '')}${x.relation && x.owner ? ' · ' : ''}${escapeHtml(x.owner || '')}
-                  </div>
-                  <div class="copy-row">
-                    <span class="label">${escapeHtml(x.bank || '')}</span>
-                    ${x.account ? `<button type="button" class="text-btn text-btn--inline" data-copy="${escapeHtml(x.account)}" data-toast="계좌 번호가 복사되었습니다.">${escapeHtml(x.account)}</button>` : ''}
-                  </div>
+                <div class="donation-item">
+                  ${(x.relation || x.owner) ? `
+                    <div class="donation-item__row">
+                      ${x.relation ? `<span class="donation-item__label">${escapeHtml(x.relation)}</span>` : ''}
+                      ${x.owner ? `<span class="donation-item__value">${escapeHtml(x.owner)}</span>` : ''}
+                    </div>
+                  ` : ''}
+                  ${(x.bank || x.account) ? `
+                    <div class="donation-item__row donation-item__row--account">
+                      ${x.bank ? `<span class="donation-item__bank">${escapeHtml(x.bank)}</span>` : ''}
+                      ${x.account ? `<span class="donation-item__account">${escapeHtml(x.account)}</span>` : ''}
+                      ${x.account ? `
+                        <button type="button" class="icon-btn" aria-label="계좌 번호 복사" data-copy="${escapeHtml(x.account)}" data-toast="계좌 번호가 복사되었습니다.">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+                        </button>
+                      ` : ''}
+                    </div>
+                  ` : ''}
                 </div>
               `).join('')}
             </section>
@@ -2375,9 +2406,12 @@ const obitsCol = collection(db, 'obituaries');
 
           ${o.messagesEnabled ? `
             <section class="card">
-              <div class="card__title" style="display:flex;justify-content:space-between;">
+              <div class="card__title" style="display:flex;justify-content:space-between;align-items:center;">
                 <span><span class="ico">⚘</span>추모 메시지</span>
-                ${!preview ? `<button class="btn--text" id="goMessages" style="font-size:12px;">더보기 ›</button>` : ''}
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <button class="card__action" id="writeMsg">메시지 작성</button>
+                  ${!preview ? `<button class="btn--text" id="goMessages" style="font-size:12px;">더보기 ›</button>` : ''}
+                </div>
               </div>
               ${o.messages.slice(0, 2).length === 0
           ? `<div class="muted" style="font-size:13px;">아직 추모 메시지가 없습니다.</div>`
@@ -2431,6 +2465,9 @@ const obitsCol = collection(db, 'obituaries');
     }
     const goMsg = e.target.closest('#goMessages');
     if (goMsg) navigate('messages', { id: state.activeObituaryId });
+
+    const writeMsg = e.target.closest('#writeMsg');
+    if (writeMsg) navigate('message-write', { id: state.activeObituaryId });
 
     const delMsg = e.target.closest('[data-msg-del]');
     if (delMsg) {

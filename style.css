@@ -290,6 +290,19 @@ img {
   margin-top: 4px;
 }
 
+.field__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.field__footer .field__help,
+.field__footer .field__counter {
+  margin-top: 0;
+}
+
 .section__notice {
   background: #f3f3f3;
   color: var(--c-text-2);
@@ -678,17 +691,36 @@ img {
 }
 
 .calendar__day.is-today {
+  color: var(--c-text);
+  font-weight: 700;
+  position: relative;
+}
+
+.calendar__day.is-today::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
   background: var(--c-text);
-  color: var(--c-surface);
 }
 
 .calendar__day.is-selected {
   background: var(--c-primary);
   color: var(--c-surface);
+  font-weight: 600;
 }
 
 .calendar__day.is-selected.is-today {
   background: var(--c-primary);
+  color: var(--c-surface);
+}
+
+.calendar__day.is-selected.is-today::after {
+  background: var(--c-surface);
 }
 
 .time-picker {
@@ -1242,6 +1274,85 @@ img {
 .venue__link:hover {
   color: var(--c-text);
   text-decoration-color: var(--c-text-2);
+}
+
+.venue__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.card__action {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  color: var(--c-text);
+  cursor: pointer;
+}
+
+.card__action:hover {
+  background: #f9f9f9;
+}
+
+.icon-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--c-text-2);
+  cursor: pointer;
+  padding: 0;
+}
+
+.icon-btn:hover {
+  color: var(--c-text);
+}
+
+.donation-item {
+  margin-bottom: 12px;
+}
+
+.donation-item:last-child {
+  margin-bottom: 0;
+}
+
+.donation-item__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--c-text);
+}
+
+.donation-item__row--account {
+  margin-top: 6px;
+  gap: 8px;
+}
+
+.donation-item__label {
+  color: var(--c-text-2);
+}
+
+.donation-item__value {
+  color: var(--c-text);
+}
+
+.donation-item__bank {
+  color: var(--c-text);
+}
+
+.donation-item__account {
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .venue__hp a {

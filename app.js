@@ -437,6 +437,36 @@ const obitsCol = collection(db, 'obituaries');
     return funeralAllCache;
   }
 
+  // Daum Postcode 기반 주소 검색 (도로명/지번/우편번호)
+  function openPostcodeSheet({ value, onConfirm }) {
+    if (!window.daum?.Postcode) {
+      toast('주소 검색을 불러올 수 없습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    openSheet(`
+      <div class="sheet-head">
+        <div class="sheet-title">주소 검색</div>
+        <button class="sheet-close" id="psClose" aria-label="닫기">×</button>
+      </div>
+      <div id="psContainer" style="width:100%;height:60vh;min-height:380px;"></div>
+    `);
+    $('#psClose').addEventListener('click', closeSheet);
+    const container = $('#psContainer');
+    new window.daum.Postcode({
+      oncomplete: (data) => {
+        const addr = data.roadAddress || data.jibunAddress || data.address || '';
+        const extra = [];
+        if (data.bname) extra.push(data.bname);
+        if (data.buildingName) extra.push(data.buildingName);
+        const full = extra.length ? `${addr} (${extra.join(', ')})` : addr;
+        closeSheet();
+        onConfirm(full, data);
+      },
+      width: '100%',
+      height: '100%',
+    }).embed(container, { q: value || '', autoClose: false });
+  }
+
   function openAddressSearchSheet({ title = '장례식장 검색', value, onConfirm, mode = 'funeral' }) {
     let allItems = [];
     let loading = true;
@@ -1896,16 +1926,13 @@ const obitsCol = collection(db, 'obituaries');
             }
           });
         } else if (kind === 'addressSearch') {
-          openAddressSearchSheet({
-            title: '주소 검색',
-            mode: 'address',
+          openPostcodeSheet({
             value: d.funeral.funeralHomeAddr,
-            onConfirm: (label, item) => {
-              if (item?.switchToManual) return;
-              d.funeral.funeralHomeAddr = item?.addr || label;
-              if (item?.name) d.funeral.funeralHomeName = item.name;
-              if (item?.phone || item?.telno) d.funeral.funeralHomePhone = item.phone || item.telno;
-              d.funeral.funeralHome = label;
+            onConfirm: (addr, data) => {
+              d.funeral.funeralHomeAddr = addr;
+              d.funeral.funeralHome = d.funeral.funeralHomeName
+                ? `${d.funeral.funeralHomeName} (${addr})`
+                : addr;
               renderEditor();
             }
           });
@@ -2298,25 +2325,20 @@ const obitsCol = collection(db, 'obituaries');
             const tel = f.funeralHomePhone || h?.telno || '';
             const hp = h?.homepageUrl || '';
             const room = f.funeralHomeRoom || '';
-            const mapQuery = encodeURIComponent(addr || name || f.funeralHome);
-            const kakaoMapUrl = `https://map.kakao.com/link/search/${mapQuery}`;
+            const addrCopy = addr || f.funeralHome || '';
+            const telDigits = tel.replace(/[^0-9+]/g, '');
             return `
             <section class="card">
               <div class="card__title"><span class="ico">⚘</span>장례식장</div>
               <div class="venue">
                 <div class="venue__name">${escapeHtml(name)}${room ? ` · ${escapeHtml(room)}` : ''}</div>
-                ${addr ? `<div class="venue__addr">${escapeHtml(addr)}</div>` : ''}
-                ${tel ? `<div class="venue__tel">${escapeHtml(tel)}</div>` : ''}
+                ${addr ? `<button type="button" class="venue__addr venue__link" data-copy="${escapeHtml(addrCopy)}" data-toast="주소가 복사되었습니다.">${escapeHtml(addr)}</button>` : ''}
+                ${tel ? `<a class="venue__tel venue__link" href="tel:${escapeHtml(telDigits)}" data-copy="${escapeHtml(tel)}" data-toast="전화번호가 복사되었습니다.">${escapeHtml(tel)}</a>` : ''}
                 ${hp ? `<div class="venue__hp"><a href="${/^https?:\/\//.test(hp) ? escapeHtml(hp) : 'https://' + escapeHtml(hp)}" target="_blank" rel="noreferrer noopener">홈페이지</a></div>` : ''}
               </div>
               ${addr ? `<div class="venue__map" data-kakao-map data-addr="${escapeHtml(addr)}" data-name="${escapeHtml(name)}">
                 <div class="venue__map-msg">지도 불러오는 중…</div>
               </div>` : ''}
-              <div class="venue__actions">
-                ${(addr || f.funeralHome) ? `<button type="button" class="text-btn" data-copy="${escapeHtml(addr || f.funeralHome)}" data-toast="주소가 복사되었습니다.">주소 복사</button>` : ''}
-                ${tel ? `<a class="text-btn" href="tel:${escapeHtml(tel.replace(/[^0-9+]/g, ''))}">전화걸기</a>` : ''}
-                ${addr ? `<a class="text-btn" href="${kakaoMapUrl}" target="_blank" rel="noreferrer noopener">카카오맵</a>` : ''}
-              </div>
             </section>
           `;})() : ''}
 
@@ -2367,9 +2389,14 @@ const obitsCol = collection(db, 'obituaries');
   }
 
   // ---------- Detail-level event delegation ----------
+  const isTouchDevice = () => window.matchMedia?.('(pointer: coarse)').matches;
   document.addEventListener('click', (e) => {
     const copy = e.target.closest('[data-copy]');
     if (copy) {
+      // tel: 링크는 터치 기기(모바일)에서만 네이티브 전화걸기로 처리, 데스크톱에서는 복사
+      const isTelLink = copy.tagName === 'A' && (copy.getAttribute('href') || '').startsWith('tel:');
+      if (isTelLink && isTouchDevice()) return;
+      if (isTelLink) e.preventDefault();
       const v = copy.dataset.copy;
       const msg = copy.dataset.toast || '복사되었습니다.';
       const done = () => toast(msg);

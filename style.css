@@ -1204,6 +1204,27 @@ img {
   font-size: 13px;
   color: var(--c-text-2);
   font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.venue__link {
+  display: inline-block;
+  width: auto;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--c-border-2);
+  font-family: inherit;
+}
+
+.venue__link:hover {
+  color: var(--c-text);
+  text-decoration-color: var(--c-text-2);
 }
 
 .venue__hp a {
@@ -1232,30 +1253,6 @@ img {
   font-size: 12px;
 }
 
-.venue__actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-
-.venue__btn {
-  flex: 1 1 auto;
-  min-width: 80px;
-  padding: 8px 10px;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  background: #fff;
-  font-size: 13px;
-  color: var(--c-text);
-  text-align: center;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.venue__btn:hover {
-  background: #f7f7f7;
-}
 
 .copy-row {
   display: flex;

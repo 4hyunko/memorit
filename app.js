@@ -1338,9 +1338,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
       });
       return;
     }
+    const rawPw = !isHashed(d.password) ? (d.password || '') : '';
     d.status = 'draft';
     d.updatedAt = new Date().toISOString();
     storage.upsert(d);
+    if (rawPw) {
+      state.authedPhone = (d.author?.phone || '').replace(/\D/g, '');
+      state.authedPw = rawPw;
+    }
     toast('저장되었습니다.');
     navigate('my');
   });
@@ -2549,23 +2554,111 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   });
 
   // ---------- Share sheet ----------
+  const KAKAO_JS_KEY = 'bde79058e624bc54d4dcdedc60406615';
+  const DEFAULT_SHARE_IMAGE = 'https://placehold.co/800x800/f3ede4/333333.png?text=%E2%9A%98';
+
+  function ensureKakaoInit() {
+    if (!window.Kakao) return false;
+    if (!window.Kakao.isInitialized?.()) {
+      try { window.Kakao.init(KAKAO_JS_KEY); } catch (e) { console.warn('Kakao init failed', e); return false; }
+    }
+    return true;
+  }
+
+  function shareToKakao(obit) {
+    if (!ensureKakaoInit() || !window.Kakao?.Share) {
+      toast('카카오톡 공유를 불러올 수 없습니다.');
+      return;
+    }
+    const url = `${location.href.split('#')[0]}#detail/${obit.id}`;
+    const name = obit.deceased?.name?.trim() || '고인';
+    const deathDate = fmtDate(obit.funeral?.deathAt?.slice(0, 10) || obit.deceased?.death);
+    const term = obit.funeral?.deathTerm || '별세';
+    const home = obit.funeral?.funeralHomeName || obit.funeral?.funeralHome || '';
+    const descParts = [];
+    if (deathDate) descParts.push(`${deathDate} ${term}`);
+    if (home) descParts.push(home);
+    const description = descParts.join('\n') || '삼가 고인의 명복을 빕니다.';
+    // Supabase 공개 URL 또는 기본 이미지
+    const photo = obit.deceased?.photo;
+    const imageUrl = (photo && /^https?:\/\//.test(photo)) ? photo : DEFAULT_SHARE_IMAGE;
+
+    window.Kakao.Share.sendDefault({
+      objectType: 'feed',
+      content: {
+        title: `故 ${name}님의 부고를 알립니다`,
+        description,
+        imageUrl,
+        link: { mobileWebUrl: url, webUrl: url },
+      },
+      buttons: [
+        { title: '부고장 보기', link: { mobileWebUrl: url, webUrl: url } },
+      ],
+    });
+  }
+
   function openShareSheet(id) {
+    const obit = storage.get(id);
     const url = `${location.href.split('#')[0]}#detail/${id}`;
     openSheet(`
       <div class="sheet-head"><div class="sheet-title">공유하기</div><button class="sheet-close" id="ssClose">×</button></div>
+      <div class="share-url">
+        <div class="share-url__text" id="shareUrlText" title="${escapeHtml(url)}">${escapeHtml(url)}</div>
+        <button type="button" class="share-url__btn" id="shareUrlCopy">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span>복사</span>
+        </button>
+      </div>
       <div class="share-list">
         <button data-share="kakao"><span class="icon">💬</span><span>카카오톡으로 공유</span></button>
-        <button data-share="copy"><span class="icon">🔗</span><span>링크 복사하기</span></button>
         <button data-share="native"><span class="icon">📤</span><span>다른 앱으로 공유</span></button>
       </div>
     `);
     $('#ssClose').addEventListener('click', closeSheet);
+
+    const copyBtn = $('#shareUrlCopy');
+    const copyBtnLabel = copyBtn?.querySelector('span');
+    const doCopy = () => {
+      const done = () => {
+        if (copyBtnLabel) copyBtnLabel.textContent = '복사됨';
+        copyBtn?.classList.add('is-done');
+        toast('부고장 링크가 복사되었습니다.');
+        setTimeout(() => {
+          if (copyBtnLabel) copyBtnLabel.textContent = '복사';
+          copyBtn?.classList.remove('is-done');
+        }, 1600);
+      };
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(url).then(done, () => { /* fallback below */
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+            document.body.removeChild(ta);
+            done();
+          } catch { toast('복사에 실패했습니다.'); }
+        });
+      } else {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+          document.body.removeChild(ta);
+          done();
+        } catch { toast('복사에 실패했습니다.'); }
+      }
+    };
+    copyBtn?.addEventListener('click', doCopy);
+    $('#shareUrlText')?.addEventListener('click', doCopy);
+
     sheetPanel.querySelectorAll('[data-share]').forEach((b) => b.addEventListener('click', () => {
       const t = b.dataset.share;
-      if (t === 'copy') { navigator.clipboard?.writeText(url); toast('부고장 링크가 복사되었습니다.'); }
-      else if (t === 'native' && navigator.share) { navigator.share({ url, title: '부고장' }).catch(() => { }); }
-      else if (t === 'kakao') { toast('카카오톡 SDK 연동이 필요합니다.'); }
-      closeSheet();
+      if (t === 'native' && navigator.share) { navigator.share({ url, title: '부고장' }).catch(() => { }); closeSheet(); }
+      else if (t === 'kakao') {
+        if (!obit) { toast('부고장 정보를 불러올 수 없습니다.'); return; }
+        shareToKakao(obit);
+        closeSheet();
+      }
     }));
   }
 

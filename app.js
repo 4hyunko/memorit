@@ -2586,7 +2586,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
       return;
     }
     const baseUrl = `${location.href.split('#')[0]}#detail/${obit.id}`;
-    const messagesUrl = `${location.href.split('#')[0]}#messages/${obit.id}`;
     const name = obit.deceased?.name?.trim() || '고인';
     const deathDate = fmtDate(obit.funeral?.deathAt?.slice(0, 10) || obit.deceased?.death);
     const term = obit.funeral?.deathTerm || '별세';
@@ -2604,7 +2603,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     const photo = obit.deceased?.photo;
     const imageUrl = (photo && /^https?:\/\//.test(photo)) ? photo : DEFAULT_SHARE_IMAGE;
     const linkObj = { mobileWebUrl: baseUrl, webUrl: baseUrl };
-    const messagesLinkObj = { mobileWebUrl: messagesUrl, webUrl: messagesUrl };
 
     window.Kakao.Share.sendDefault({
       objectType: 'feed',
@@ -2614,9 +2612,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         imageUrl,
         link: linkObj,
       },
+      buttonTitle: '부고장 보기',
       buttons: [
         { title: '부고장 보기', link: linkObj },
-        { title: '추모 메시지 남기기', link: messagesLinkObj },
       ],
       installTalk: true,
     });

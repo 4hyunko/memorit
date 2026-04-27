@@ -150,7 +150,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
       return data;
     });
     storage._ready = true;
-    if (['landing', 'my', 'detail'].includes(state.route)) render();
+    if (['landing', 'my', 'detail', 'messages', 'message-write'].includes(state.route)) render();
   }, (err) => {
     console.error('Firestore subscribe failed', err);
     toast('다시 시도해주세요.');
@@ -2328,10 +2328,18 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   // ---------- Detail (recipient view) ----------
   function renderDetail() {
     const id = state.params.id;
-    const o = storage.get(id);
-    if (!o) { toast('부고장을 찾을 수 없습니다.'); return navigate('landing'); }
-    state.activeObituaryId = id;
     setHeader({ title: '부고장', back: true, menu: true, activeId: id });
+    const o = storage.get(id);
+    if (!o) {
+      // Firestore 데이터가 아직 안 들어왔으면 로딩 상태로 대기 (snapshot 콜백이 render() 재호출)
+      if (!storage._ready) {
+        viewEl.innerHTML = `<div class="list__empty" style="padding:60px 20px;">불러오는 중...</div>`;
+        return;
+      }
+      toast('부고장을 찾을 수 없습니다.');
+      return navigate('landing');
+    }
+    state.activeObituaryId = id;
 
     if (o.status === 'ended') return navigate('ended');
 
@@ -2586,7 +2594,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
   // ---------- Share sheet ----------
   const KAKAO_JS_KEY = 'bde79058e624bc54d4dcdedc60406615';
-  const DEFAULT_SHARE_IMAGE = 'https://placehold.co/800x800/f3ede4/333333.png?text=%E2%9A%98';
+  const DEFAULT_SHARE_IMAGE = 'https://images.unsplash.com/photo-1561181286-d3fee7d55364?w=800&h=800&fit=crop&auto=format';
 
   function ensureKakaoInit() {
     if (!window.Kakao) return false;
@@ -2595,6 +2603,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     }
     return true;
   }
+
+  const KAKAO_SHARE_TEMPLATE_ID = 132583;
 
   function shareToKakao(obit) {
     if (!ensureKakaoInit() || !window.Kakao?.Share) {
@@ -2606,25 +2616,26 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     const deathDate = fmtDate(obit.funeral?.deathAt?.slice(0, 10) || obit.deceased?.death);
     const term = obit.funeral?.deathTerm || '별세';
     const home = obit.funeral?.funeralHomeName || obit.funeral?.funeralHome || '';
+    const carryAt = obit.funeral?.carryAt;
+    const carryStr = carryAt && !obit.funeral?.carryDateUndecided
+      ? (obit.funeral?.carryTimeUndecided ? `발인 ${fmtDate(carryAt.slice(0, 10))}` : `발인 ${fmtDateTime(carryAt)}`)
+      : '';
     const descParts = [];
     if (deathDate) descParts.push(`${deathDate} ${term}`);
+    if (carryStr) descParts.push(carryStr);
     if (home) descParts.push(home);
     const description = descParts.join('\n') || '삼가 고인의 명복을 빕니다.';
-    // Supabase 공개 URL 또는 기본 이미지
     const photo = obit.deceased?.photo;
     const imageUrl = (photo && /^https?:\/\//.test(photo)) ? photo : DEFAULT_SHARE_IMAGE;
 
-    window.Kakao.Share.sendDefault({
-      objectType: 'feed',
-      content: {
-        title: `故 ${name}님의 부고를 알립니다`,
+    window.Kakao.Share.sendCustom({
+      templateId: KAKAO_SHARE_TEMPLATE_ID,
+      templateArgs: {
+        name,
         description,
         imageUrl,
-        link: { mobileWebUrl: url, webUrl: url },
+        id: obit.id,
       },
-      buttons: [
-        { title: '부고장 보기', link: { mobileWebUrl: url, webUrl: url } },
-      ],
     });
   }
 
@@ -2696,10 +2707,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   // ---------- Messages list ----------
   function renderMessages() {
     const id = state.params.id || state.activeObituaryId;
-    const o = storage.get(id);
-    if (!o) return navigate('landing');
-    state.activeObituaryId = id;
     setHeader({ title: '추모 메시지', back: true, menu: false });
+    const o = storage.get(id);
+    if (!o) {
+      if (!storage._ready) {
+        viewEl.innerHTML = `<div class="list__empty" style="padding:60px 20px;">불러오는 중...</div>`;
+        return;
+      }
+      return navigate('landing');
+    }
+    state.activeObituaryId = id;
     viewEl.innerHTML = `
       <div class="list" style="background:var(--c-surface);min-height:100%;">
         ${o.messages.length === 0
@@ -2794,6 +2811,21 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   }
   window.addEventListener('popstate', syncFromHash);
   window.addEventListener('hashchange', syncFromHash);
+
+  // 공유 링크 호환: ?id=xxx 쿼리 파라미터로 들어오면 #detail/xxx 로 정규화
+  // (카카오 공유는 URL의 # 이후를 자르므로 쿼리 방식이 안전)
+  (function migrateQueryParam() {
+    try {
+      const params = new URLSearchParams(location.search);
+      const id = params.get('id');
+      if (id) {
+        params.delete('id');
+        const newQuery = params.toString();
+        const newPath = location.pathname + (newQuery ? `?${newQuery}` : '') + `#detail/${id}`;
+        history.replaceState(null, '', newPath);
+      }
+    } catch { /* noop */ }
+  })();
 
   // ---------- Boot ----------
   syncFromHash();

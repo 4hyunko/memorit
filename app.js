@@ -2585,18 +2585,26 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
       toast('카카오톡 공유를 불러올 수 없습니다.');
       return;
     }
-    const url = `${location.href.split('#')[0]}#detail/${obit.id}`;
+    const baseUrl = `${location.href.split('#')[0]}#detail/${obit.id}`;
+    const messagesUrl = `${location.href.split('#')[0]}#messages/${obit.id}`;
     const name = obit.deceased?.name?.trim() || '고인';
     const deathDate = fmtDate(obit.funeral?.deathAt?.slice(0, 10) || obit.deceased?.death);
     const term = obit.funeral?.deathTerm || '별세';
     const home = obit.funeral?.funeralHomeName || obit.funeral?.funeralHome || '';
+    const carryAt = obit.funeral?.carryAt;
+    const carryStr = carryAt && !obit.funeral?.carryDateUndecided
+      ? (obit.funeral?.carryTimeUndecided ? `발인 ${fmtDate(carryAt.slice(0, 10))}` : `발인 ${fmtDateTime(carryAt)}`)
+      : '';
     const descParts = [];
     if (deathDate) descParts.push(`${deathDate} ${term}`);
+    if (carryStr) descParts.push(carryStr);
     if (home) descParts.push(home);
     const description = descParts.join('\n') || '삼가 고인의 명복을 빕니다.';
     // Supabase 공개 URL 또는 기본 이미지
     const photo = obit.deceased?.photo;
     const imageUrl = (photo && /^https?:\/\//.test(photo)) ? photo : DEFAULT_SHARE_IMAGE;
+    const linkObj = { mobileWebUrl: baseUrl, webUrl: baseUrl };
+    const messagesLinkObj = { mobileWebUrl: messagesUrl, webUrl: messagesUrl };
 
     window.Kakao.Share.sendDefault({
       objectType: 'feed',
@@ -2604,11 +2612,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         title: `故 ${name}님의 부고를 알립니다`,
         description,
         imageUrl,
-        link: { mobileWebUrl: url, webUrl: url },
+        link: linkObj,
       },
       buttons: [
-        { title: '부고장 보기', link: { mobileWebUrl: url, webUrl: url } },
+        { title: '부고장 보기', link: linkObj },
+        { title: '추모 메시지 남기기', link: messagesLinkObj },
       ],
+      installTalk: true,
     });
   }
 

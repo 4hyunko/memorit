@@ -2610,7 +2610,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         name,
         description,
         imageUrl,
-        url: `#detail/${obit.id}`,
+        id: obit.id,
       },
     });
   }
@@ -2787,6 +2787,21 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   }
   window.addEventListener('popstate', syncFromHash);
   window.addEventListener('hashchange', syncFromHash);
+
+  // 공유 링크 호환: ?id=xxx 쿼리 파라미터로 들어오면 #detail/xxx 로 정규화
+  // (카카오 공유는 URL의 # 이후를 자르므로 쿼리 방식이 안전)
+  (function migrateQueryParam() {
+    try {
+      const params = new URLSearchParams(location.search);
+      const id = params.get('id');
+      if (id) {
+        params.delete('id');
+        const newQuery = params.toString();
+        const newPath = location.pathname + (newQuery ? `?${newQuery}` : '') + `#detail/${id}`;
+        history.replaceState(null, '', newPath);
+      }
+    } catch { /* noop */ }
+  })();
 
   // ---------- Boot ----------
   syncFromHash();

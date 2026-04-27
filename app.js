@@ -2610,7 +2610,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         name,
         description,
         imageUrl,
-        url,
+        url: `#detail/${obit.id}`,
       },
     });
   }

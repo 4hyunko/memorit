@@ -2616,7 +2616,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
       buttons: [
         { title: '부고장 보기', link: linkObj },
       ],
-      installTalk: true,
     });
   }
 

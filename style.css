@@ -114,8 +114,10 @@ img {
 }
 
 .logo-mark {
-  font-size: 18px;
-  color: #444;
+  height: 22px;
+  width: auto;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .header__menu {

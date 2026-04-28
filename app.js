@@ -1353,7 +1353,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   }
 
   function setHeader({ title, back = false, menu = true, saveDraft = false, activeId = null }) {
-    $('#headerTitle').innerHTML = title || `<span class="logo-mark">⚘</span> Memorit`;
+    $('#headerTitle').innerHTML = title || `<img class="logo-mark" src="image/logo.svg" alt="Memorit" /> Memorit`;
     $('#headerTitle').dataset.activeId = activeId || '';
     $('#headerBack').hidden = !back;
     $('#headerMenu').style.display = menu ? '' : 'none';

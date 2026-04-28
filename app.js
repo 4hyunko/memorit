@@ -2237,12 +2237,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
       navigate('preview');
     });
     $('#btnComplete').addEventListener('click', () => {
+      // 수정 모드에서 비밀번호 미변경 시 원래 해시 복원 (validate 전에 적용해야 검증 통과)
+      if (!d.password && state.editOriginalPasswordHash) d.password = state.editOriginalPasswordHash;
       const err = validate(d);
       if (err) { toast(err); return; }
       if (!$('#termsAgree')?.checked) { toast('필수항목을 다시 확인해주세요.'); return; }
       // 해시되기 전 raw 비밀번호를 캡처해서 자동 인증에 사용
       const rawPw = !isHashed(d.password) ? (d.password || '') : '';
-      if (!d.password && state.editOriginalPasswordHash) d.password = state.editOriginalPasswordHash;
+      const isEditMode = !!state.editOriginalPasswordHash;
       d.status = 'active';
       d.updatedAt = new Date().toISOString();
       storage.upsert(d);
@@ -2251,7 +2253,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         state.authedPhone = (d.author?.phone || '').replace(/\D/g, '');
         state.authedPw = rawPw;
       }
-      toast('저장되었습니다.');
+      toast(isEditMode ? '부고장 수정이 완료되었습니다.' : '저장되었습니다.');
       navigate('my');
     });
   }

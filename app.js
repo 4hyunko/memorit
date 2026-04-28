@@ -1255,7 +1255,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
       if (!id) return toast('수정할 부고장이 없습니다.');
       askPassword(id, () => navigate('edit', { id }));
     } else if (action === 'my-obituaries') {
-      navigate('my');
+      if (state.authedPhone && state.authedPw) {
+        navigate('my');
+      } else {
+        openMyObituariesSheet();
+      }
     } else if (action === 'privacy') {
       navigate('privacy');
     } else if (action === 'terms') {

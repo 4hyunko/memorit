@@ -1,5 +1,5 @@
 /* ======================================================
-   수정Memorial Tree - Web App (free obituary builder)
+   Memorit - Web App (free obituary builder)
    Single-file vanilla JS SPA. Persistence: Firestore.
    ====================================================== */
 
@@ -1353,7 +1353,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   }
 
   function setHeader({ title, back = false, menu = true, saveDraft = false, activeId = null }) {
-    $('#headerTitle').innerHTML = title || `<span class="logo-mark">⚘</span> Memorial Tree`;
+    $('#headerTitle').innerHTML = title || `<span class="logo-mark">⚘</span> Memorit`;
     $('#headerTitle').dataset.activeId = activeId || '';
     $('#headerBack').hidden = !back;
     $('#headerMenu').style.display = menu ? '' : 'none';

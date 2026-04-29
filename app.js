@@ -29,6 +29,9 @@ const SUPABASE_KEY = 'sb_publishable_6zqulXul93cHF74IG3H2EQ_pI2n_e4e';
 const SUPABASE_BUCKET = 'photo';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// 국화 아웃라인 SVG 아이콘 (16×16 viewBox, 8 outer + 8 inner petals + center)
+const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" style="vertical-align:-0.15em"><ellipse cx="8" cy="3.5" rx="1.2" ry="2.5"/><ellipse cx="8" cy="3.5" rx="1.2" ry="2.5" transform="rotate(45 8 8)"/><ellipse cx="8" cy="3.5" rx="1.2" ry="2.5" transform="rotate(90 8 8)"/><ellipse cx="8" cy="3.5" rx="1.2" ry="2.5" transform="rotate(135 8 8)"/><ellipse cx="8" cy="3.5" rx="1.2" ry="2.5" transform="rotate(180 8 8)"/><ellipse cx="8" cy="3.5" rx="1.2" ry="2.5" transform="rotate(225 8 8)"/><ellipse cx="8" cy="3.5" rx="1.2" ry="2.5" transform="rotate(270 8 8)"/><ellipse cx="8" cy="3.5" rx="1.2" ry="2.5" transform="rotate(315 8 8)"/><ellipse cx="8" cy="4.8" rx="0.8" ry="1.7" transform="rotate(22.5 8 8)"/><ellipse cx="8" cy="4.8" rx="0.8" ry="1.7" transform="rotate(67.5 8 8)"/><ellipse cx="8" cy="4.8" rx="0.8" ry="1.7" transform="rotate(112.5 8 8)"/><ellipse cx="8" cy="4.8" rx="0.8" ry="1.7" transform="rotate(157.5 8 8)"/><ellipse cx="8" cy="4.8" rx="0.8" ry="1.7" transform="rotate(202.5 8 8)"/><ellipse cx="8" cy="4.8" rx="0.8" ry="1.7" transform="rotate(247.5 8 8)"/><ellipse cx="8" cy="4.8" rx="0.8" ry="1.7" transform="rotate(292.5 8 8)"/><ellipse cx="8" cy="4.8" rx="0.8" ry="1.7" transform="rotate(337.5 8 8)"/><circle cx="8" cy="8" r="1.5"/></svg>`;
+
 (() => {
   'use strict';
 
@@ -1698,7 +1701,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         <!-- 고인 정보 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">⚘</span>고인 정보</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>고인 정보</div>
           </div>
           <div class="field">
             <label class="field__label">성함<span class="req">*</span></label>
@@ -1745,7 +1748,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         <!-- 상주 정보 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">⚘</span>상주 정보</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>상주 정보</div>
             <button class="btn--text" id="addMourner" style="font-size:13px;">+ 추가하기</button>
           </div>
           <div id="mournersList">
@@ -1756,7 +1759,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         <!-- 장례식장 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">⚘</span>장례식장</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>장례식장</div>
           </div>
           <div class="section__notice">장례식장 검색 시 주소와 연락처가 자동 입력됩니다. 목록에 없으면 직접 입력해 주세요.</div>
           ${d.funeral.funeralHomeMode === 'manual' ? `
@@ -1808,7 +1811,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         <!-- 장례 일정 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">⚘</span>장례 일정</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>장례 일정</div>
           </div>
           <div class="field">
             <label class="field__label">임종 용어<span class="req">*</span></label>
@@ -1848,7 +1851,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         <!-- 알리는 글 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">⚘</span>알리는 글</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>알리는 글</div>
           </div>
           <div class="field">
             <textarea class="textarea" maxlength="200" data-bind="notice" placeholder="황망한 마음에 일일이 직접 연락드리지 못함을 널리 헤아려주시기 바랍니다.">${escapeHtml(d.notice)}</textarea>
@@ -1862,7 +1865,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         <!-- 마음을 전하는 곳 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">⚘</span>마음을 전하는 곳</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>마음을 전하는 곳</div>
             ${d.noDonation ? '' : `<button class="btn btn--secondary" id="addDonation" style="height:32px;padding:0 12px;font-size:13px;">+ 추가하기</button>`}
           </div>
           <div id="donationsList">
@@ -1878,7 +1881,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         <!-- 메시지 받기 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">⚘</span>추모 메시지 받기</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>추모 메시지 받기</div>
             <span class="toggle ${d.messagesEnabled ? 'is-on' : ''}" data-toggle="messagesEnabled"></span>
           </div>
           <div class="muted" style="font-size:12px;">조문객들에게 추모 메시지를 받을 수 있어요.</div>
@@ -1888,7 +1891,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         <!-- 작성자 정보 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">⚘</span>작성자 정보</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>작성자 정보</div>
           </div>
           <div class="section__notice">추후 부고장 수정/삭제 시 필요합니다</div>
           <div class="field">
@@ -2554,7 +2557,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         <div class="obituary__body">
 
           <section class="card">
-            <div class="card__title"><span class="ico">⚘</span>고인 정보</div>
+            <div class="card__title"><span class="ico">${CHR_ICON}</span>고인 정보</div>
             <div class="deceased">
               ${photoBlock}
               <div>
@@ -2573,7 +2576,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
             const noticeText = (o.notice && o.notice.trim()) ? o.notice : '황망한 마음에 일일이 직접 연락드리지 못함을 널리 헤아려주시기 바랍니다.';
             return `
             <section class="card">
-              <div class="card__title"><span class="ico">⚘</span>상주 정보</div>
+              <div class="card__title"><span class="ico">${CHR_ICON}</span>상주 정보</div>
               ${validMourners.length ? `
                 <dl class="def-list">
                   ${validMourners.map(m => `<div class="row"><dt>${escapeHtml(m.relation || '')}</dt><dd>${escapeHtml(m.name || '')}</dd></div>`).join('')}
@@ -2584,7 +2587,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
           `;})()}
 
           <section class="card">
-            <div class="card__title"><span class="ico">⚘</span>장례 일정</div>
+            <div class="card__title"><span class="ico">${CHR_ICON}</span>장례 일정</div>
             <dl class="def-list">
               <div class="row"><dt>${escapeHtml(f.deathTerm || '별세')}일</dt><dd>${fmtDate(f.deathAt?.slice(0, 10))}</dd></div>
               <div class="row"><dt>입관일시</dt><dd>${f.encoffinAt ? (f.encoffinTimeUndecided ? fmtDate(f.encoffinAt.slice(0, 10)) : fmtDateTime(f.encoffinAt)) : '미정'}</dd></div>
@@ -2604,7 +2607,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
             const addrForCopy = addr || f.funeralHome || '';
             return `
             <section class="card">
-              <div class="card__title"><span class="ico">⚘</span>장례식장</div>
+              <div class="card__title"><span class="ico">${CHR_ICON}</span>장례식장</div>
               <div class="venue">
                 <div class="venue__name">${escapeHtml(name)}${room ? ` · ${escapeHtml(room)}` : ''}</div>
                 ${addrForCopy ? `
@@ -2630,7 +2633,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
           ${!o.noDonation && o.donations.some(x => x.bank || x.account) ? `
             <section class="card">
-              <div class="card__title"><span class="ico">⚘</span>마음을 전하는 곳</div>
+              <div class="card__title"><span class="ico">${CHR_ICON}</span>마음을 전하는 곳</div>
               ${o.donations.filter(x => x.bank || x.account).map(x => `
                 <div class="donation-item">
                   ${(x.relation || x.owner) ? `
@@ -2662,7 +2665,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
             return `
             <section class="card">
               <div class="card__title" style="display:flex;justify-content:space-between;align-items:center;">
-                <span><span class="ico">⚘</span>추모 메시지</span>
+                <span><span class="ico">${CHR_ICON}</span>추모 메시지</span>
                 <button class="card__action" id="writeMsg">메시지 작성</button>
               </div>
               ${visible.length === 0

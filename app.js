@@ -1933,7 +1933,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     return `
       <div class="field-row" data-row="title" data-i="${i}" style="grid-template-columns:${cols};gap:6px;margin-bottom:8px;">
         <input class="input" data-bind-arr="deceased.titles.${i}" data-title-input="${i}" value="${escapeHtml(value || '')}" placeholder="직함을 입력해 주세요" />
-        ${showTrash ? `<button class="btn--icon" data-remove="title" data-i="${i}" aria-label="삭제">🗑</button>` : ''}
+        ${showTrash ? `<button class="btn--icon" data-remove="title" data-i="${i}" aria-label="삭제"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>` : ''}
       </div>
     `;
   }
@@ -1949,7 +1949,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         </button>
         <div style="display:flex;gap:6px;">
           <input class="input" style="flex:1;" data-bind-arr="mourners.${i}.name" value="${escapeHtml(m.name || '')}" placeholder="${namePlaceholder}" ${isFirst ? 'required' : ''} />
-          ${isFirst ? '' : `<button class="btn--icon" data-remove="mourner" data-i="${i}" aria-label="삭제">🗑</button>`}
+          ${isFirst ? '' : `<button class="btn--icon" data-remove="mourner" data-i="${i}" aria-label="삭제"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>`}
         </div>
       </div>
     `;
@@ -1962,7 +1962,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
       <div class="donation-row" data-row="donation" data-i="${i}">
         <div class="donation-row__head">
           <span class="donation-row__label">${groupLabel}</span>
-          ${isFirst ? '' : `<button class="btn--icon donation-row__del" data-remove="donation" data-i="${i}" aria-label="계좌 삭제">🗑</button>`}
+          ${isFirst ? '' : `<button class="btn--icon donation-row__del" data-remove="donation" data-i="${i}" aria-label="계좌 삭제"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>`}
         </div>
         <div class="field-row">
           <button type="button" class="select-trigger ${x.relation ? '' : 'is-placeholder'}" data-pick="donation-rel" data-i="${i}">

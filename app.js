@@ -385,8 +385,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   function _syncSheetToKeyboard() {
     const vv = window.visualViewport;
     if (!vv) return;
-    // 키보드 높이 = 레이아웃 뷰포트 - 비주얼 뷰포트(키보드 제외 영역) - 스크롤 오프셋
-    const keyH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    const rawKeyH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    // iOS URL bar 높이 차이(~50px)는 무시 — 실제 키보드만 반응 (최소 150px 이상)
+    const keyH = rawKeyH >= 150 ? rawKeyH : 0;
     sheetPanel.style.bottom    = keyH > 0 ? `${keyH}px` : '';
     sheetPanel.style.maxHeight = keyH > 0 ? `${vv.height * 0.92}px` : '';
   }
@@ -394,18 +395,17 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   // focusin: 키보드 완전히 뜰 때까지 대기 후 동기화 (iOS 보조)
   function _onSheetFocusIn(e) {
     if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    setTimeout(_syncSheetToKeyboard, 350); // iOS 키보드 애니메이션 대기
+    setTimeout(_syncSheetToKeyboard, 350);
   }
   // focusout: 패널 밖으로 포커스 나갔을 때만 리셋
   function _onSheetFocusOut(e) {
-    if (sheetPanel.contains(e.relatedTarget)) return; // 패널 내 다른 인풋으로 이동 시 무시
+    if (sheetPanel.contains(e.relatedTarget)) return;
     setTimeout(_syncSheetToKeyboard, 100);
   }
 
   function openSheet(html) {
     sheetPanel.innerHTML = html;
     sheetEl.setAttribute('aria-hidden', 'false');
-    // visualViewport 방식 (Android + 최신 iOS)
     if (window.visualViewport && !sheetEl._vvCleanup) {
       window.visualViewport.addEventListener('resize', _syncSheetToKeyboard);
       window.visualViewport.addEventListener('scroll', _syncSheetToKeyboard);
@@ -414,18 +414,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         window.visualViewport.removeEventListener('scroll', _syncSheetToKeyboard);
       };
     }
-    // focusin/focusout 보조 트리거 (iOS Safari 대응)
     sheetPanel.addEventListener('focusin',  _onSheetFocusIn);
     sheetPanel.addEventListener('focusout', _onSheetFocusOut);
   }
 
   function closeSheet() {
-    sheetEl.setAttribute('aria-hidden', 'true');
+    // ① 리스너 제거
     if (sheetEl._vvCleanup) { sheetEl._vvCleanup(); sheetEl._vvCleanup = null; }
     sheetPanel.removeEventListener('focusin',  _onSheetFocusIn);
     sheetPanel.removeEventListener('focusout', _onSheetFocusOut);
-    sheetPanel.style.bottom    = '';
-    sheetPanel.style.maxHeight = '';
+    // ② bottom/maxHeight를 transition 없이 즉시 0으로 리셋
+    //    → 키보드 오프셋이 남아있을 때 translateY(100%)가 화면 밖까지 완전히 내려가도록
+    sheetPanel.style.transition = 'none';
+    sheetPanel.style.bottom     = '';
+    sheetPanel.style.maxHeight  = '';
+    void sheetPanel.offsetHeight; // force reflow
+    sheetPanel.style.transition = ''; // CSS transition 복원
+    // ③ 닫힘 애니메이션 (transform: translateY(100%))
+    sheetEl.setAttribute('aria-hidden', 'true');
   }
   $('#bottomSheetBackdrop').addEventListener('click', closeSheet);
 

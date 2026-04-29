@@ -36,7 +36,7 @@
 html,
 body {
   height: 100%;
-  background: #111;
+  background: #d0d0d0;
   font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
   color: var(--c-text);
   font-size: 15px;

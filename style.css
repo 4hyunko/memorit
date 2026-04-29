@@ -1617,11 +1617,19 @@ img {
 }
 
 .donation-item {
-  margin-bottom: 12px;
+  padding: 10px 0;
+}
+
+.donation-item:first-child {
+  padding-top: 4px;
 }
 
 .donation-item:last-child {
-  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.donation-item + .donation-item {
+  border-top: 1px solid var(--c-border);
 }
 
 .donation-item__row {

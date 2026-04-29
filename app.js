@@ -380,11 +380,36 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
   // ---------- Bottom sheet ----------
   const sheetEl = $('#bottomSheet'), sheetPanel = $('#bottomSheetPanel');
+
+  // 키보드가 올라올 때 바텀시트를 키보드 위로 밀어올리기
+  function _syncSheetToKeyboard() {
+    if (!window.visualViewport) return;
+    const vv = window.visualViewport;
+    // 키보드 높이 = 전체 뷰포트 - 비주얼 뷰포트 - 상단 오프셋
+    const keyH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    sheetPanel.style.bottom = keyH > 0 ? `${keyH}px` : '';
+    sheetPanel.style.maxHeight = keyH > 0 ? `${vv.height * 0.92}px` : '';
+  }
+
   function openSheet(html) {
     sheetPanel.innerHTML = html;
     sheetEl.setAttribute('aria-hidden', 'false');
+    if (window.visualViewport && !sheetEl._vvCleanup) {
+      window.visualViewport.addEventListener('resize', _syncSheetToKeyboard);
+      window.visualViewport.addEventListener('scroll', _syncSheetToKeyboard);
+      sheetEl._vvCleanup = () => {
+        window.visualViewport.removeEventListener('resize', _syncSheetToKeyboard);
+        window.visualViewport.removeEventListener('scroll', _syncSheetToKeyboard);
+      };
+    }
   }
-  function closeSheet() { sheetEl.setAttribute('aria-hidden', 'true'); }
+
+  function closeSheet() {
+    sheetEl.setAttribute('aria-hidden', 'true');
+    if (sheetEl._vvCleanup) { sheetEl._vvCleanup(); sheetEl._vvCleanup = null; }
+    sheetPanel.style.bottom = '';
+    sheetPanel.style.maxHeight = '';
+  }
   $('#bottomSheetBackdrop').addEventListener('click', closeSheet);
 
   // My Obituaries auth bottom-sheet (phone + password)

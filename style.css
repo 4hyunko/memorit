@@ -1139,9 +1139,9 @@ img {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 .view:has(.obituary) .bottom-cta .btn--secondary {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #fff;
+  background: #ffffff;
+  border: 1px solid #ffffff;
+  color: #1a1a1a;
 }
 .view:has(.obituary) .bottom-cta .btn--primary {
   background: #fff;

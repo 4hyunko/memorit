@@ -1475,10 +1475,7 @@ img {
   background: #eee;
   border-radius: 2px;
   overflow: hidden;
-  border: 3px solid rgba(185, 135, 18, 0.58);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.42),
-    0 4px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 0 0 2px #1a1a1a;
 }
 
 .deceased__photo img {

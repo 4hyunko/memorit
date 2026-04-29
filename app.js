@@ -1708,7 +1708,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
             <input class="input" data-bind="deceased.name" value="${escapeHtml(d.deceased.name)}" placeholder="홍길동" />
           </div>
           <div class="field">
-            <label class="field__label">생년월일</label>
+            <label class="field__label">생년월일<span class="req">*</span></label>
             <div style="display:grid;grid-template-columns:3fr 1fr;gap:8px;">
               <input class="input" id="birthInput" data-bind="deceased.birth" value="${escapeHtml(d.deceased.birth || '')}" placeholder="예)810910" inputmode="numeric" maxlength="6" />
               <input class="input" id="ageInput" value="${ageDisplay(d.deceased.birth)}" placeholder="향년" disabled />
@@ -1748,7 +1748,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 상주 정보 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>상주 정보</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>상주 정보<span class="req">*</span></div>
             <button class="btn--text" id="addMourner" style="font-size:13px;">+ 추가하기</button>
           </div>
           <div id="mournersList">
@@ -1759,7 +1759,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 장례식장 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>장례식장</div>
+            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>장례식장<span class="req">*</span></div>
           </div>
           <div class="section__notice">장례식장 검색 시 주소와 연락처가 자동 입력됩니다. 목록에 없으면 직접 입력해 주세요.</div>
           ${d.funeral.funeralHomeMode === 'manual' ? `
@@ -2341,7 +2341,10 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
 
   function validate(d) {
     if (!d.deceased.name?.trim()) return '필수항목을 다시 확인해주세요.';
+    if (!d.deceased.birth?.trim()) return '필수항목을 다시 확인해주세요.';
     if (!d.funeral.deathAt) return '필수항목을 다시 확인해주세요.';
+    if (!d.mourners?.[0]?.name?.trim()) return '필수항목을 다시 확인해주세요.';
+    if (!d.funeral.funeralHomeName?.trim()) return '필수항목을 다시 확인해주세요.';
     if (!d.author.phone?.trim()) return '필수항목을 다시 확인해주세요.';
     if (!isHashed(d.password) && !/^\d{6}$/.test(d.password || '')) return '비밀번호는 6자리 숫자입니다.';
     if (!isHashed(d.password) && d.password !== d.passwordConfirm) return '비밀번호가 일치하지 않습니다.';

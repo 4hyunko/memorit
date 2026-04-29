@@ -429,7 +429,8 @@ img {
   font-weight: 500;
 }
 
-.field__label .req {
+.field__label .req,
+.section__title .req {
   color: var(--c-error);
   margin-left: 2px;
 }

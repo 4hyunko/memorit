@@ -1063,7 +1063,7 @@ img {
   display: inline-flex;
   align-items: center;
   font-size: 15px;
-  color: var(--c-text-2);
+  color: rgba(202, 151, 24, 0.9);
   margin-right: 2px;
 }
 
@@ -1458,6 +1458,7 @@ img {
 
 .card__title .ico {
   font-size: 14px;
+  color: rgba(202, 151, 24, 0.9);
 }
 
 .deceased {

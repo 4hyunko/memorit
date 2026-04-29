@@ -2318,9 +2318,13 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
     $('#btnComplete').addEventListener('click', () => {
       // 수정 모드에서 비밀번호 미변경 시 원래 해시 복원 (validate 전에 적용해야 검증 통과)
       if (!d.password && state.editOriginalPasswordHash) d.password = state.editOriginalPasswordHash;
-      const err = validate(d);
-      if (err) { toast(err); return; }
-      if (!$('#termsAgree')?.checked) { toast('필수항목을 다시 확인해주세요.'); return; }
+      const result = validate(d);
+      if (result) { toast(result.err); focusField(result.sel); return; }
+      if (!$('#termsAgree')?.checked) {
+        toast('필수항목을 다시 확인해주세요.');
+        focusField('#termsAgree');
+        return;
+      }
       // 해시되기 전 raw 비밀번호를 캡처해서 자동 인증에 사용
       const rawPw = !isHashed(d.password) ? (d.password || '') : '';
       const isEditMode = !!state.editOriginalPasswordHash;
@@ -2339,15 +2343,33 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
 
   function updateCTAState() { /* preview button always enabled */ }
 
+  function focusField(sel) {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const target = el.closest('.field') || el.closest('.section') || el;
+    target.classList.add('field--focus-error');
+    setTimeout(() => target.classList.remove('field--focus-error'), 1600);
+    setTimeout(() => el.focus?.({ preventScroll: true }), 350);
+  }
+
   function validate(d) {
-    if (!d.deceased.name?.trim()) return '필수항목을 다시 확인해주세요.';
-    if (!d.deceased.birth?.trim()) return '필수항목을 다시 확인해주세요.';
-    if (!d.funeral.deathAt) return '필수항목을 다시 확인해주세요.';
-    if (!d.mourners?.[0]?.name?.trim()) return '필수항목을 다시 확인해주세요.';
-    if (!d.funeral.funeralHomeName?.trim()) return '필수항목을 다시 확인해주세요.';
-    if (!d.author.phone?.trim()) return '필수항목을 다시 확인해주세요.';
-    if (!isHashed(d.password) && !/^\d{6}$/.test(d.password || '')) return '비밀번호는 6자리 숫자입니다.';
-    if (!isHashed(d.password) && d.password !== d.passwordConfirm) return '비밀번호가 일치하지 않습니다.';
+    if (!d.deceased.name?.trim())
+      return { err: '필수항목을 다시 확인해주세요.', sel: '[data-bind="deceased.name"]' };
+    if (!d.deceased.birth?.trim())
+      return { err: '필수항목을 다시 확인해주세요.', sel: '#birthInput' };
+    if (!d.funeral.deathAt)
+      return { err: '필수항목을 다시 확인해주세요.', sel: '[data-pick-funeral="death"]' };
+    if (!d.mourners?.[0]?.name?.trim())
+      return { err: '필수항목을 다시 확인해주세요.', sel: '[data-bind-arr="mourners.0.name"]' };
+    if (!d.funeral.funeralHomeName?.trim())
+      return { err: '필수항목을 다시 확인해주세요.', sel: d.funeral.funeralHomeMode === 'manual' ? '#fhNameInput' : '[data-pick-funeral="funeralHome"]' };
+    if (!d.author.phone?.trim())
+      return { err: '필수항목을 다시 확인해주세요.', sel: '#authorPhoneInput' };
+    if (!isHashed(d.password) && !/^\d{6}$/.test(d.password || ''))
+      return { err: '비밀번호는 6자리 숫자입니다.', sel: '#authorPwInput' };
+    if (!isHashed(d.password) && d.password !== d.passwordConfirm)
+      return { err: '비밀번호가 일치하지 않습니다.', sel: '#authorPwConfirmInput' };
     return null;
   }
 

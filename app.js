@@ -1,5 +1,5 @@
 /* ======================================================
-   Memorit - Web App (free obituary builder)
+   수정Memorial Tree - Web App (free obituary builder)
    Single-file vanilla JS SPA. Persistence: Firestore.
    ====================================================== */
 
@@ -9,18 +9,33 @@ import {
   doc, setDoc, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { FIREBASE_CONFIG, SUPABASE_URL, SUPABASE_KEY, KAKAO_KEY } from './config.js';
 
-const fbApp = initializeApp(FIREBASE_CONFIG);
+// ---------- Runtime config (from server /api/config, populated from .env) ----------
+const cfg = await fetch('/api/config', { cache: 'no-store' })
+  .then((r) => { if (!r.ok) throw new Error('config fetch failed: ' + r.status); return r.json(); });
+
+// Firebase
+const fbApp = initializeApp(cfg.firebase);
 const db = getFirestore(fbApp);
 const obitsCol = collection(db, 'obituaries');
 
 // Supabase (영정사진 저장)
-const SUPABASE_BUCKET = 'photo';
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const SUPABASE_BUCKET = cfg.supabase.bucket;
+const supabase = createClient(cfg.supabase.url, cfg.supabase.anonKey);
 
-// 국화 아웃라인 SVG 아이콘 (16×16 viewBox, 꽃잎 8장 + 중심 원)
-const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1" style="vertical-align:-0.15em"><ellipse cx="8" cy="3.8" rx="1.3" ry="2.8"/><ellipse cx="8" cy="3.8" rx="1.3" ry="2.8" transform="rotate(45 8 8)"/><ellipse cx="8" cy="3.8" rx="1.3" ry="2.8" transform="rotate(90 8 8)"/><ellipse cx="8" cy="3.8" rx="1.3" ry="2.8" transform="rotate(135 8 8)"/><ellipse cx="8" cy="3.8" rx="1.3" ry="2.8" transform="rotate(180 8 8)"/><ellipse cx="8" cy="3.8" rx="1.3" ry="2.8" transform="rotate(225 8 8)"/><ellipse cx="8" cy="3.8" rx="1.3" ry="2.8" transform="rotate(270 8 8)"/><ellipse cx="8" cy="3.8" rx="1.3" ry="2.8" transform="rotate(315 8 8)"/><circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/></svg>`;
+// Kakao key (지도 SDK 동적 로드 + Kakao Share init에서 사용)
+const KAKAO_KEY = cfg.kakao.key;
+
+// Load Kakao Maps SDK dynamically (replaces hard-coded <script> in index.html)
+(function loadKakaoMapsScript() {
+  if (!KAKAO_KEY) return;
+  if (document.querySelector('script[data-kakao-maps]')) return;
+  const s = document.createElement('script');
+  s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(KAKAO_KEY)}&libraries=services&autoload=false`;
+  s.async = false;
+  s.dataset.kakaoMaps = '1';
+  document.head.appendChild(s);
+})();
 
 (() => {
   'use strict';
@@ -303,35 +318,6 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
     toastTimer = setTimeout(hideToast, 2200);
   }
 
-  // ---------- Light particles (헌화하기 인터랙션) ----------
-  function spawnIncenseSmoke(originEl) {
-    if (!originEl) return;
-    const rect = originEl.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const top = rect.top;
-    const layer = document.createElement('div');
-    layer.className = 'light-layer';
-    document.body.appendChild(layer);
-    const PARTICLES = 14;
-    for (let i = 0; i < PARTICLES; i++) {
-      const p = document.createElement('span');
-      p.className = 'light-particle';
-      const offsetX = (Math.random() - 0.5) * 60;
-      const drift = (Math.random() - 0.5) * 140;
-      const size = 6 + Math.random() * 10;
-      const delay = i * 80 + Math.random() * 120;
-      const duration = 1800 + Math.random() * 1200;
-      p.style.left = `${cx + offsetX}px`;
-      p.style.top = `${top}px`;
-      p.style.setProperty('--size', `${size}px`);
-      p.style.setProperty('--drift', `${drift}px`);
-      p.style.setProperty('--duration', `${duration}ms`);
-      p.style.setProperty('--delay', `${delay}ms`);
-      layer.appendChild(p);
-    }
-    setTimeout(() => layer.remove(), 4000);
-  }
-
   // ---------- Modal ----------
   const modalEl = $('#modal'), modalPanel = $('#modalPanel');
   function openModal({ title, desc, body = '', actions = [] }) {
@@ -373,59 +359,11 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
 
   // ---------- Bottom sheet ----------
   const sheetEl = $('#bottomSheet'), sheetPanel = $('#bottomSheetPanel');
-
-  // 키보드가 올라올 때 바텀시트를 키보드 위로 밀어올리기
-  function _syncSheetToKeyboard() {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const rawKeyH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-    // iOS URL bar 높이 차이(~50px)는 무시 — 실제 키보드만 반응 (최소 150px 이상)
-    const keyH = rawKeyH >= 150 ? rawKeyH : 0;
-    sheetPanel.style.bottom    = keyH > 0 ? `${keyH}px` : '';
-    sheetPanel.style.maxHeight = keyH > 0 ? `${vv.height * 0.92}px` : '';
-  }
-
-  // focusin: 키보드 완전히 뜰 때까지 대기 후 동기화 (iOS 보조)
-  function _onSheetFocusIn(e) {
-    if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-    setTimeout(_syncSheetToKeyboard, 350);
-  }
-  // focusout: 패널 밖으로 포커스 나갔을 때만 리셋
-  function _onSheetFocusOut(e) {
-    if (sheetPanel.contains(e.relatedTarget)) return;
-    setTimeout(_syncSheetToKeyboard, 100);
-  }
-
   function openSheet(html) {
     sheetPanel.innerHTML = html;
     sheetEl.setAttribute('aria-hidden', 'false');
-    if (window.visualViewport && !sheetEl._vvCleanup) {
-      window.visualViewport.addEventListener('resize', _syncSheetToKeyboard);
-      window.visualViewport.addEventListener('scroll', _syncSheetToKeyboard);
-      sheetEl._vvCleanup = () => {
-        window.visualViewport.removeEventListener('resize', _syncSheetToKeyboard);
-        window.visualViewport.removeEventListener('scroll', _syncSheetToKeyboard);
-      };
-    }
-    sheetPanel.addEventListener('focusin',  _onSheetFocusIn);
-    sheetPanel.addEventListener('focusout', _onSheetFocusOut);
   }
-
-  function closeSheet() {
-    // ① 리스너 제거
-    if (sheetEl._vvCleanup) { sheetEl._vvCleanup(); sheetEl._vvCleanup = null; }
-    sheetPanel.removeEventListener('focusin',  _onSheetFocusIn);
-    sheetPanel.removeEventListener('focusout', _onSheetFocusOut);
-    // ② bottom/maxHeight를 transition 없이 즉시 0으로 리셋
-    //    → 키보드 오프셋이 남아있을 때 translateY(100%)가 화면 밖까지 완전히 내려가도록
-    sheetPanel.style.transition = 'none';
-    sheetPanel.style.bottom     = '';
-    sheetPanel.style.maxHeight  = '';
-    void sheetPanel.offsetHeight; // force reflow
-    sheetPanel.style.transition = ''; // CSS transition 복원
-    // ③ 닫힘 애니메이션 (transform: translateY(100%))
-    sheetEl.setAttribute('aria-hidden', 'true');
-  }
+  function closeSheet() { sheetEl.setAttribute('aria-hidden', 'true'); }
   $('#bottomSheetBackdrop').addEventListener('click', closeSheet);
 
   // My Obituaries auth bottom-sheet (phone + password)
@@ -1325,11 +1263,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
       if (!id) return toast('수정할 부고장이 없습니다.');
       askPassword(id, () => navigate('edit', { id }));
     } else if (action === 'my-obituaries') {
-      if (state.authedPhone && state.authedPw) {
-        navigate('my');
-      } else {
-        openMyObituariesSheet();
-      }
+      navigate('my');
     } else if (action === 'privacy') {
       navigate('privacy');
     } else if (action === 'terms') {
@@ -1394,7 +1328,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
   }
 
   function setHeader({ title, back = false, menu = true, saveDraft = false, activeId = null }) {
-    $('#headerTitle').innerHTML = title || `<img class="logo-mark" src="image/logo.svg" alt="Memorit" /> Memorit`;
+    $('#headerTitle').innerHTML = title || `<span class="logo-mark">⚘</span> Memorial Tree`;
     $('#headerTitle').dataset.activeId = activeId || '';
     $('#headerBack').hidden = !back;
     $('#headerMenu').style.display = menu ? '' : 'none';
@@ -1431,11 +1365,8 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
   });
 
   $('#headerBack').addEventListener('click', () => {
-    const isEditMode = !!state.editOriginalPasswordHash;
-    const draftId = state.draft?.id || state.params?.id;
-
-    if (state.route === 'create') {
-      // 신규 작성 화면 → 랜딩
+    // simple back logic
+    if (state.route === 'create' || state.route === 'edit') {
       if (state.draft && hasUnsavedChanges()) {
         openModal({
           title: '안내',
@@ -1446,43 +1377,18 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
           ]
         }).then((v) => { if (v === 'leave') { state.draft = null; navigate('landing'); } });
       } else { navigate('landing'); }
-
-    } else if (state.route === 'edit') {
-      // 수정 화면 → 부고장 상세 (또는 랜딩)
-      const goBack = () => {
-        state.draft = null;
-        draftId ? navigate('detail', { id: draftId }) : navigate('landing');
-      };
-      if (state.draft && hasUnsavedChanges()) {
-        openModal({
-          title: '안내',
-          desc: '수정 중인 내용이 저장되지 않아요.\n계속 수정하시겠어요?',
-          actions: [
-            { label: '나가기', value: 'leave' },
-            { label: '계속 수정', primary: true },
-          ]
-        }).then((v) => { if (v === 'leave') goBack(); });
-      } else { goBack(); }
-
     } else if (state.route === 'preview') {
-      // 미리보기 → 수정 화면 or 신규 작성 화면
-      if (isEditMode) {
-        navigate('edit', { id: draftId });
-      } else {
-        navigate('create');
-      }
-
+      navigate('create');
     } else if (state.route === 'detail') {
       navigate('landing');
-
+    } else if (state.route === 'edit') {
+      navigate('detail', { id: state.params.id });
     } else if (state.route === 'messages' || state.route === 'message-write') {
       const id = state.params.id || state.activeObituaryId;
       if (id) navigate('detail', { id });
       else navigate('landing');
-
     } else if (['my', 'privacy', 'terms', 'ended'].includes(state.route)) {
       history.length > 1 ? history.back() : navigate('landing');
-
     } else {
       navigate('landing');
     }
@@ -1534,9 +1440,9 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
             <img class="landing__sway" src="image/gukhwa.png" alt="" aria-hidden="true" />
           </div>
           <div class="landing__copy">
-            <div class="landing__sub">간편 부고장 서비스</div>
-            <div class="landing__title">정중한 부고 안내의 시작, 메모릿</div>
-            <div class="landing__desc">마음을 담은 부고장을 무료로 만들어보세요.</div>
+            <div class="landing__sub">간편 부고장</div>
+            <div class="landing__title">부고장을 제작합니다</div>
+            <div class="landing__desc">유족들과 조문객들에게 전할 안내를 작성해보세요</div>
           </div>
         </div>
         <div class="landing__cta">
@@ -1544,23 +1450,9 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
           <button class="btn btn--secondary" id="btnCreate">부고장 만들기</button>
         </div>
       </section>
-      <footer class="site-footer">
-        <div class="site-footer__company">
-          <div class="site-footer__name">(주) 호학당</div>
-          <div class="site-footer__line">사업자 등록번호 : 278-86-02319 | 대표 : 고현 | 임태일</div>
-          <div class="site-footer__line">서울 송파구 가락로5길 32 2층</div>
-        </div>
-        <nav class="site-footer__links">
-          <button type="button" data-action="privacy">개인정보처리방침</button>
-          <button type="button" data-action="terms">서비스이용약관</button>
-        </nav>
-      </footer>
     `;
     $('#btnMy').addEventListener('click', () => openMyObituariesSheet());
     $('#btnCreate').addEventListener('click', () => { state.draft = newObituary(); navigate('create'); });
-    viewEl.querySelectorAll('.site-footer__links [data-action]').forEach(btn => {
-      btn.addEventListener('click', () => navigate(btn.dataset.action));
-    });
   }
 
   // ---------- My obituaries ----------
@@ -1675,7 +1567,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
     }
 
     const isEdit = state.route === 'edit';
-    setHeader({ title: isEdit ? '부고장 수정' : '부고장 만들기', back: true, menu: false, saveDraft: true });
+    setHeader({ title: isEdit ? '부고장 수정하기' : '부고장 만들기', back: true, menu: false, saveDraft: true });
 
     const d = state.draft;
     if (isEdit && isHashed(d.password)) {
@@ -1691,14 +1583,14 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 고인 정보 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>고인 정보</div>
+            <div class="section__title"><span class="icon-bullet">⚘</span>고인 정보</div>
           </div>
           <div class="field">
             <label class="field__label">성함<span class="req">*</span></label>
             <input class="input" data-bind="deceased.name" value="${escapeHtml(d.deceased.name)}" placeholder="홍길동" />
           </div>
           <div class="field">
-            <label class="field__label">생년월일<span class="req">*</span></label>
+            <label class="field__label">생년월일</label>
             <div style="display:grid;grid-template-columns:3fr 1fr;gap:8px;">
               <input class="input" id="birthInput" data-bind="deceased.birth" value="${escapeHtml(d.deceased.birth || '')}" placeholder="예)810910" inputmode="numeric" maxlength="6" />
               <input class="input" id="ageInput" value="${ageDisplay(d.deceased.birth)}" placeholder="향년" disabled />
@@ -1738,7 +1630,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 상주 정보 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>상주 정보<span class="req">*</span></div>
+            <div class="section__title"><span class="icon-bullet">⚘</span>상주 정보</div>
             <button class="btn--text" id="addMourner" style="font-size:13px;">+ 추가하기</button>
           </div>
           <div id="mournersList">
@@ -1749,7 +1641,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 장례식장 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>장례식장<span class="req">*</span></div>
+            <div class="section__title"><span class="icon-bullet">⚘</span>장례식장</div>
           </div>
           <div class="section__notice">장례식장 검색 시 주소와 연락처가 자동 입력됩니다. 목록에 없으면 직접 입력해 주세요.</div>
           ${d.funeral.funeralHomeMode === 'manual' ? `
@@ -1801,7 +1693,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 장례 일정 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>장례 일정</div>
+            <div class="section__title"><span class="icon-bullet">⚘</span>장례 일정</div>
           </div>
           <div class="field">
             <label class="field__label">임종 용어<span class="req">*</span></label>
@@ -1841,7 +1733,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 알리는 글 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>알리는 글</div>
+            <div class="section__title"><span class="icon-bullet">⚘</span>알리는 글</div>
           </div>
           <div class="field">
             <textarea class="textarea" maxlength="200" data-bind="notice" placeholder="황망한 마음에 일일이 직접 연락드리지 못함을 널리 헤아려주시기 바랍니다.">${escapeHtml(d.notice)}</textarea>
@@ -1855,7 +1747,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 마음을 전하는 곳 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>마음을 전하는 곳</div>
+            <div class="section__title"><span class="icon-bullet">⚘</span>마음을 전하는 곳</div>
             ${d.noDonation ? '' : `<button class="btn btn--secondary" id="addDonation" style="height:32px;padding:0 12px;font-size:13px;">+ 추가하기</button>`}
           </div>
           <div id="donationsList">
@@ -1871,7 +1763,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 메시지 받기 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>추모 메시지 받기</div>
+            <div class="section__title"><span class="icon-bullet">⚘</span>추모 메시지 받기</div>
             <span class="toggle ${d.messagesEnabled ? 'is-on' : ''}" data-toggle="messagesEnabled"></span>
           </div>
           <div class="muted" style="font-size:12px;">조문객들에게 추모 메시지를 받을 수 있어요.</div>
@@ -1881,7 +1773,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <!-- 작성자 정보 -->
         <section class="section">
           <div class="section__head">
-            <div class="section__title"><span class="icon-bullet">${CHR_ICON}</span>작성자 정보</div>
+            <div class="section__title"><span class="icon-bullet">⚘</span>작성자 정보</div>
           </div>
           <div class="section__notice">추후 부고장 수정/삭제 시 필요합니다</div>
           <div class="field">
@@ -1926,7 +1818,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
     return `
       <div class="field-row" data-row="title" data-i="${i}" style="grid-template-columns:${cols};gap:6px;margin-bottom:8px;">
         <input class="input" data-bind-arr="deceased.titles.${i}" data-title-input="${i}" value="${escapeHtml(value || '')}" placeholder="직함을 입력해 주세요" />
-        ${showTrash ? `<button class="btn--icon" data-remove="title" data-i="${i}" aria-label="삭제"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>` : ''}
+        ${showTrash ? `<button class="btn--icon" data-remove="title" data-i="${i}" aria-label="삭제">🗑</button>` : ''}
       </div>
     `;
   }
@@ -1942,7 +1834,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         </button>
         <div style="display:flex;gap:6px;">
           <input class="input" style="flex:1;" data-bind-arr="mourners.${i}.name" value="${escapeHtml(m.name || '')}" placeholder="${namePlaceholder}" ${isFirst ? 'required' : ''} />
-          ${isFirst ? '' : `<button class="btn--icon" data-remove="mourner" data-i="${i}" aria-label="삭제"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>`}
+          ${isFirst ? '' : `<button class="btn--icon" data-remove="mourner" data-i="${i}" aria-label="삭제">🗑</button>`}
         </div>
       </div>
     `;
@@ -1955,7 +1847,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
       <div class="donation-row" data-row="donation" data-i="${i}">
         <div class="donation-row__head">
           <span class="donation-row__label">${groupLabel}</span>
-          ${isFirst ? '' : `<button class="btn--icon donation-row__del" data-remove="donation" data-i="${i}" aria-label="계좌 삭제"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>`}
+          ${isFirst ? '' : `<button class="btn--icon donation-row__del" data-remove="donation" data-i="${i}" aria-label="계좌 삭제">🗑</button>`}
         </div>
         <div class="field-row">
           <button type="button" class="select-trigger ${x.relation ? '' : 'is-placeholder'}" data-pick="donation-rel" data-i="${i}">
@@ -2306,18 +2198,12 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
       navigate('preview');
     });
     $('#btnComplete').addEventListener('click', () => {
-      // 수정 모드에서 비밀번호 미변경 시 원래 해시 복원 (validate 전에 적용해야 검증 통과)
-      if (!d.password && state.editOriginalPasswordHash) d.password = state.editOriginalPasswordHash;
-      const result = validate(d);
-      if (result) { toast(result.err); focusField(result.sel); return; }
-      if (!$('#termsAgree')?.checked) {
-        toast('필수항목을 다시 확인해주세요.');
-        focusField('#termsAgree');
-        return;
-      }
+      const err = validate(d);
+      if (err) { toast(err); return; }
+      if (!$('#termsAgree')?.checked) { toast('필수항목을 다시 확인해주세요.'); return; }
       // 해시되기 전 raw 비밀번호를 캡처해서 자동 인증에 사용
       const rawPw = !isHashed(d.password) ? (d.password || '') : '';
-      const isEditMode = !!state.editOriginalPasswordHash;
+      if (!d.password && state.editOriginalPasswordHash) d.password = state.editOriginalPasswordHash;
       d.status = 'active';
       d.updatedAt = new Date().toISOString();
       storage.upsert(d);
@@ -2326,40 +2212,19 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         state.authedPhone = (d.author?.phone || '').replace(/\D/g, '');
         state.authedPw = rawPw;
       }
-      toast(isEditMode ? '부고장 수정이 완료되었습니다.' : '저장되었습니다.');
+      toast('저장되었습니다.');
       navigate('my');
     });
   }
 
   function updateCTAState() { /* preview button always enabled */ }
 
-  function focusField(sel) {
-    const el = document.querySelector(sel);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const target = el.closest('.field') || el.closest('.section') || el;
-    target.classList.add('field--focus-error');
-    setTimeout(() => target.classList.remove('field--focus-error'), 1600);
-    setTimeout(() => el.focus?.({ preventScroll: true }), 350);
-  }
-
   function validate(d) {
-    if (!d.deceased.name?.trim())
-      return { err: '필수항목을 다시 확인해주세요.', sel: '[data-bind="deceased.name"]' };
-    if (!d.deceased.birth?.trim())
-      return { err: '필수항목을 다시 확인해주세요.', sel: '#birthInput' };
-    if (!d.funeral.deathAt)
-      return { err: '필수항목을 다시 확인해주세요.', sel: '[data-pick-funeral="death"]' };
-    if (!d.mourners?.[0]?.name?.trim())
-      return { err: '필수항목을 다시 확인해주세요.', sel: '[data-bind-arr="mourners.0.name"]' };
-    if (!d.funeral.funeralHomeName?.trim())
-      return { err: '필수항목을 다시 확인해주세요.', sel: d.funeral.funeralHomeMode === 'manual' ? '#fhNameInput' : '[data-pick-funeral="funeralHome"]' };
-    if (!d.author.phone?.trim())
-      return { err: '필수항목을 다시 확인해주세요.', sel: '#authorPhoneInput' };
-    if (!isHashed(d.password) && !/^\d{6}$/.test(d.password || ''))
-      return { err: '비밀번호는 6자리 숫자입니다.', sel: '#authorPwInput' };
-    if (!isHashed(d.password) && d.password !== d.passwordConfirm)
-      return { err: '비밀번호가 일치하지 않습니다.', sel: '#authorPwConfirmInput' };
+    if (!d.deceased.name?.trim()) return '필수항목을 다시 확인해주세요.';
+    if (!d.funeral.deathAt) return '필수항목을 다시 확인해주세요.';
+    if (!d.author.phone?.trim()) return '필수항목을 다시 확인해주세요.';
+    if (!isHashed(d.password) && !/^\d{6}$/.test(d.password || '')) return '비밀번호는 6자리 숫자입니다.';
+    if (!isHashed(d.password) && d.password !== d.passwordConfirm) return '비밀번호가 일치하지 않습니다.';
     return null;
   }
 
@@ -2380,17 +2245,9 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
   function loadKakaoMaps() {
     if (kakaoMapsPromise) return kakaoMapsPromise;
     kakaoMapsPromise = new Promise((resolve, reject) => {
-      const init = () => {
-        if (window.kakao?.maps?.services) { resolve(window.kakao); return; }
-        window.kakao.maps.load(() => resolve(window.kakao));
-      };
-      if (window.kakao?.maps) { init(); return; }
-      // SDK 미로드 시 동적 삽입 (config.js의 KAKAO_KEY 사용)
-      const s = document.createElement('script');
-      s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&libraries=services&autoload=false`;
-      s.onload = init;
-      s.onerror = () => reject(new Error('Kakao Maps SDK 로드 실패'));
-      document.head.appendChild(s);
+      if (!window.kakao?.maps) { reject(new Error('Kakao SDK not present')); return; }
+      if (window.kakao.maps.services) { resolve(window.kakao); return; }
+      window.kakao.maps.load(() => resolve(window.kakao));
     });
     return kakaoMapsPromise;
   }
@@ -2481,15 +2338,19 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
     initFuneralMaps(viewEl);
     viewEl.insertAdjacentHTML('beforeend', `
       <div class="bottom-cta bottom-cta--two">
-        <button class="btn btn--secondary" id="btnFlower">헌화하기</button>
-        <button class="btn btn--primary" id="btnShare">공유하기</button>
+        <button class="btn btn--secondary" id="btnEdit">편집하기</button>
+        <button class="btn btn--primary" id="btnPublish">등록하기</button>
       </div>
     `);
-    $('#btnFlower').addEventListener('click', (e) => {
-      spawnIncenseSmoke(e.currentTarget);
-      toast('마음이 전달되었습니다.');
+    $('#btnEdit').addEventListener('click', () => navigate('create'));
+    $('#btnPublish').addEventListener('click', () => {
+      d.status = 'published';
+      d.updatedAt = new Date().toISOString();
+      storage.upsert(d);
+      toast('부고장 링크가 복사되었습니다.');
+      try { navigator.clipboard?.writeText(`${location.href.split('#')[0]}#detail/${d.id}`); } catch { }
+      navigate('detail', { id: d.id });
     });
-    $('#btnShare').addEventListener('click', () => openShareSheet(d.id));
   }
 
   // ---------- Detail (recipient view) ----------
@@ -2518,14 +2379,13 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
         <button class="btn btn--primary" id="btnShare">공유하기</button>
       </div>
     `);
-    $('#btnFlower').addEventListener('click', (e) => {
+    $('#btnFlower').addEventListener('click', () => {
       const cur = storage.get(id);
       if (!cur) return;
       cur.flowerCount = Number(cur.flowerCount || 0) + 1;
       storage.upsert(cur);
       const countEl = viewEl.querySelector('.hero__flower-count');
       if (countEl) countEl.textContent = cur.flowerCount;
-      spawnIncenseSmoke(e.currentTarget);
       toast('마음이 전달되었습니다.');
     });
     $('#btnShare').addEventListener('click', () => openShareSheet(id));
@@ -2537,7 +2397,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
     const headTitle = d.name ? `삼가 ${escapeHtml(d.name)}님의<br>명복을 빕니다.` : '삼가 고인의<br>명복을 빕니다.';
 
     const photoBlock = d.showPhoto && d.photo
-      ? `<div class="deceased__photo ${d.photoBW ? 'is-bw' : ''}">${photoCropImgHTML(d, 100, 125)}</div>`
+      ? `<div class="deceased__photo ${d.photoBW ? 'is-bw' : ''}">${photoCropImgHTML(d, 80, 100)}</div>`
       : `<div class="deceased__photo" style="display:flex;align-items:center;justify-content:center;color:#bbb;">⚘</div>`;
 
     const flowerCount = Number(o.flowerCount || 0);
@@ -2548,39 +2408,24 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
       const [y, m, day] = iso.split('-');
       return y && m && day ? `${y}년 ${parseInt(m, 10)}월 ${parseInt(day, 10)}일` : iso.replaceAll('-', '.');
     })();
-    const heroPetals = Array.from({ length: 12 }, (_, i) => {
-      const x = (i * 8.7 + 4) % 100;
-      const delay = (i * 0.6) % 7;
-      const duration = 9 + (i % 5);
-      const size = 5 + (i % 4) * 2;
-      const drift = (i % 3 === 0 ? 1 : -1) * (10 + (i % 4) * 5);
-      const rot = (i % 2 === 0 ? 1 : -1) * (300 + (i % 3) * 120);
-      return `<span class="petal" style="--x:${x}%;--d:${delay}s;--t:${duration}s;--s:${size}px;--dx:${drift}px;--r:${rot}deg"></span>`;
-    }).join('');
     return `
       <div class="obituary">
         <header class="obituary__hero">
-          <div class="hero__petals" aria-hidden="true">${heroPetals}</div>
           <div class="hero__flower-badge">
             <span class="hero__flower-icon">✿</span>
             <span class="hero__flower-label">헌화</span>
             <span class="hero__flower-count">${flowerCount}</span>
           </div>
-          <div class="hero__inner">
-            <div class="hero__stage">
-              <img class="hero__sway" src="image/gukhwa.png" alt="" aria-hidden="true" />
-            </div>
-            <div class="hero__title">삼가 고인의<br>명복을 빕니다</div>
-            <div class="hero__notice">
-              <div class="hero__name">故 ${escapeHtml(d.name || '')}님</div>
-              <div class="hero__sub">${deathDateStr ? `${deathDateStr} ${escapeHtml(deathTerm)}하셨기에<br>` : ''}삼가 알려드립니다.</div>
-            </div>
+          <div class="hero__title">삼가 고인의<br>명복을 빕니다</div>
+          <div class="hero__notice">
+            <div class="hero__name">故 ${escapeHtml(d.name || '')}님</div>
+            <div class="hero__sub">${deathDateStr ? `${deathDateStr} ${escapeHtml(deathTerm)}하셨기에<br>` : ''}삼가 알려드립니다.</div>
           </div>
         </header>
         <div class="obituary__body">
 
           <section class="card">
-            <div class="card__title"><span class="ico">${CHR_ICON}</span>고인 정보</div>
+            <div class="card__title"><span class="ico">⚘</span>고인 정보</div>
             <div class="deceased">
               ${photoBlock}
               <div>
@@ -2594,23 +2439,20 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
             </div>
           </section>
 
-          ${(() => {
-            const validMourners = (o.mourners || []).filter(m => (m.relation || m.name));
-            const noticeText = (o.notice && o.notice.trim()) ? o.notice : '황망한 마음에 일일이 직접 연락드리지 못함을 널리 헤아려주시기 바랍니다.';
-            return `
+          ${o.mourners.length || o.notice ? `
             <section class="card">
-              <div class="card__title"><span class="ico">${CHR_ICON}</span>상주 정보</div>
-              ${validMourners.length ? `
+              <div class="card__title"><span class="ico">⚘</span>상주 정보</div>
+              ${o.mourners.length ? `
                 <dl class="def-list">
-                  ${validMourners.map(m => `<div class="row"><dt>${escapeHtml(m.relation || '')}</dt><dd>${escapeHtml(m.name || '')}</dd></div>`).join('')}
+                  ${o.mourners.map(m => `<div class="row"><dt>${escapeHtml(m.relation || '')}</dt><dd>${escapeHtml(m.name || '')}</dd></div>`).join('')}
                 </dl>
               ` : ''}
-              <div class="message-block mourner-notice">${escapeHtml(noticeText)}</div>
+              ${o.notice ? `<div class="message-block mourner-notice">${escapeHtml(o.notice)}</div>` : ''}
             </section>
-          `;})()}
+          `: ''}
 
           <section class="card">
-            <div class="card__title"><span class="ico">${CHR_ICON}</span>장례 일정</div>
+            <div class="card__title"><span class="ico">⚘</span>장례 일정</div>
             <dl class="def-list">
               <div class="row"><dt>${escapeHtml(f.deathTerm || '별세')}일</dt><dd>${fmtDate(f.deathAt?.slice(0, 10))}</dd></div>
               <div class="row"><dt>입관일시</dt><dd>${f.encoffinAt ? (f.encoffinTimeUndecided ? fmtDate(f.encoffinAt.slice(0, 10)) : fmtDateTime(f.encoffinAt)) : '미정'}</dd></div>
@@ -2625,12 +2467,11 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
             const addr = f.funeralHomeAddr || h?.addr || '';
             const tel = f.funeralHomePhone || h?.telno || '';
             const hp = h?.homepageUrl || '';
-            const roomRaw = f.funeralHomeRoom || '';
-            const room = roomRaw && /^\d+$/.test(roomRaw.trim()) ? `${roomRaw.trim()}호실` : roomRaw;
+            const room = f.funeralHomeRoom || '';
             const addrForCopy = addr || f.funeralHome || '';
             return `
             <section class="card">
-              <div class="card__title"><span class="ico">${CHR_ICON}</span>장례식장</div>
+              <div class="card__title"><span class="ico">⚘</span>장례식장</div>
               <div class="venue">
                 <div class="venue__name">${escapeHtml(name)}${room ? ` · ${escapeHtml(room)}` : ''}</div>
                 ${addrForCopy ? `
@@ -2656,7 +2497,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
 
           ${!o.noDonation && o.donations.some(x => x.bank || x.account) ? `
             <section class="card">
-              <div class="card__title"><span class="ico">${CHR_ICON}</span>마음을 전하는 곳</div>
+              <div class="card__title"><span class="ico">⚘</span>마음을 전하는 곳</div>
               ${o.donations.filter(x => x.bank || x.account).map(x => `
                 <div class="donation-item">
                   ${(x.relation || x.owner) ? `
@@ -2688,7 +2529,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
             return `
             <section class="card">
               <div class="card__title" style="display:flex;justify-content:space-between;align-items:center;">
-                <span style="display:inline-flex;align-items:center;gap:6px;"><span class="ico">${CHR_ICON}</span>추모 메시지</span>
+                <span><span class="ico">⚘</span>추모 메시지</span>
                 <button class="card__action" id="writeMsg">메시지 작성</button>
               </div>
               ${visible.length === 0
@@ -2780,12 +2621,13 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
   });
 
   // ---------- Share sheet ----------
+  const KAKAO_JS_KEY = KAKAO_KEY;
   const DEFAULT_SHARE_IMAGE = 'https://images.unsplash.com/photo-1561181286-d3fee7d55364?w=800&h=800&fit=crop&auto=format';
 
   function ensureKakaoInit() {
     if (!window.Kakao) return false;
     if (!window.Kakao.isInitialized?.()) {
-      try { window.Kakao.init(KAKAO_KEY); } catch (e) { console.warn('Kakao init failed', e); return false; }
+      try { window.Kakao.init(KAKAO_JS_KEY); } catch (e) { console.warn('Kakao init failed', e); return false; }
     }
     return true;
   }
@@ -2919,7 +2761,7 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
     const id = state.params.id || state.activeObituaryId;
     setHeader({ title: '추모 메시지 작성', back: true, menu: false });
     viewEl.innerHTML = `
-      <div style="padding:16px;background:#f5f5f5;min-height:calc(100dvh - var(--header-h));">
+      <div style="padding:16px;background:var(--c-surface);min-height:100%;">
         <div class="field">
           <label class="field__label">이름</label>
           <input class="input" id="mName" placeholder="작성자명을 입력해주세요." />
@@ -2978,165 +2820,13 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
   }
 
   // ---------- Policy pages ----------
-  const POLICY_CONTENT = {
-    '서비스 이용약관': `
-      <p class="policy__intro">
-        Memorit 서비스 이용약관에 오신 것을 환영합니다. 본 약관은 (주)호학당(이하 "회사")이 제공하는
-        온라인 부고장 작성·공유 서비스 "Memorit"(이하 "서비스") 이용에 관한 회원과 회사 간의
-        권리·의무 및 책임사항을 규정하는 것을 목적으로 합니다.
-      </p>
-
-      <h3>제1조 (목적)</h3>
-      <p>이 약관은 회사가 제공하는 서비스의 이용 조건 및 절차, 회원과 회사의 권리·의무, 책임사항, 기타 필요한 사항을 규정함을 목적으로 합니다.</p>
-
-      <h3>제2조 (정의)</h3>
-      <ol>
-        <li>"서비스"란 회사가 운영하는 온라인 부고장 작성·공유 플랫폼(app.memorit.kr 및 관련 채널)을 말합니다.</li>
-        <li>"이용자"란 본 약관에 따라 회사가 제공하는 서비스를 이용하는 자를 말합니다.</li>
-        <li>"부고장"이란 이용자가 서비스를 통해 작성·등록·공유하는 고인의 부고 정보 게시물을 말합니다.</li>
-        <li>"조문객"이란 부고장 링크를 통해 부고장을 열람하고 추모 메시지·헌화 등을 남기는 자를 말합니다.</li>
-      </ol>
-
-      <h3>제3조 (약관의 게시와 개정)</h3>
-      <ol>
-        <li>회사는 본 약관의 내용을 이용자가 쉽게 알 수 있도록 서비스 초기 화면 또는 연결화면에 게시합니다.</li>
-        <li>회사는 관련 법령을 위반하지 않는 범위에서 본 약관을 개정할 수 있으며, 개정 시 적용일자 및 개정 사유를 명시하여 적용일자 7일 전부터 서비스 내에 공지합니다.</li>
-        <li>이용자가 개정 약관에 동의하지 않을 경우 서비스 이용을 중단할 수 있습니다. 개정 약관의 효력 발생일 이후에도 서비스를 계속 이용하는 경우 동의한 것으로 봅니다.</li>
-      </ol>
-
-      <h3>제4조 (서비스의 제공)</h3>
-      <ol>
-        <li>회사는 다음과 같은 서비스를 제공합니다.
-          <ul>
-            <li>부고장 작성·편집·삭제 기능</li>
-            <li>부고장 공유 링크 및 카카오톡 등 SNS 공유 기능</li>
-            <li>장례식장 정보 검색 및 위치 안내</li>
-            <li>추모 메시지·헌화 등 조문 기능</li>
-            <li>기타 회사가 추가로 개발하거나 제휴를 통해 제공하는 일체의 서비스</li>
-          </ul>
-        </li>
-        <li>회사는 서비스를 24시간 제공하는 것을 원칙으로 하나, 시스템 점검·교체 또는 장애 등 운영상 필요한 경우 일시적으로 중단할 수 있습니다.</li>
-      </ol>
-
-      <h3>제5조 (서비스 이용)</h3>
-      <ol>
-        <li>이용자는 별도의 회원가입 없이 휴대폰 번호와 비밀번호를 통해 부고장을 작성·관리할 수 있습니다.</li>
-        <li>이용자는 비밀번호를 직접 관리할 책임이 있으며, 비밀번호 분실·유출로 인한 부고장 무단 접근에 대해 회사는 책임을 지지 않습니다.</li>
-        <li>회사가 제공하는 기본 기능은 무료로 이용할 수 있으며, 추후 유료 부가 서비스가 도입되는 경우 별도로 고지합니다.</li>
-      </ol>
-
-      <h3>제6조 (이용자의 의무)</h3>
-      <ol>
-        <li>이용자는 다음 각 호의 행위를 해서는 안 됩니다.
-          <ul>
-            <li>타인의 개인정보(고인 또는 유족 포함)를 본인의 동의 없이 등록하는 행위</li>
-            <li>허위 부고장을 작성하거나 사실과 다른 정보를 게시하는 행위</li>
-            <li>음란·폭력·차별·혐오 등 사회질서에 반하는 콘텐츠를 게시하는 행위</li>
-            <li>타인의 저작권·초상권 등 권리를 침해하는 행위</li>
-            <li>서비스의 운영을 방해하거나 서버에 부담을 주는 행위</li>
-            <li>기타 관계 법령에 위배되는 행위</li>
-          </ul>
-        </li>
-        <li>이용자가 등록하는 콘텐츠(영정사진, 텍스트 등)에 대한 책임은 이용자 본인에게 있습니다.</li>
-      </ol>
-
-      <h3>제7조 (게시물의 관리)</h3>
-      <ol>
-        <li>이용자가 등록한 부고장·추모 메시지 등 게시물의 저작권은 해당 이용자에게 귀속됩니다.</li>
-        <li>회사는 이용자가 게시한 콘텐츠를 서비스 운영·홍보 등 목적으로 사용할 수 있으며, 이 경우 이용자의 동의를 사전에 받습니다.</li>
-        <li>이용자의 게시물이 본 약관 또는 관계 법령에 위배되는 경우, 회사는 사전 통지 없이 게시물을 삭제하거나 비공개 처리할 수 있습니다.</li>
-      </ol>
-
-      <h3>제8조 (개인정보보호)</h3>
-      <p>회사는 이용자의 개인정보를 보호하기 위해 노력하며, 개인정보의 수집·이용·보관·제공·파기에 관한 사항은 별도의 「개인정보처리방침」에 따릅니다.</p>
-
-      <h3>제9조 (책임의 제한)</h3>
-      <ol>
-        <li>회사는 천재지변, 전쟁, 통신장애, 기타 불가항력으로 인해 서비스를 제공할 수 없는 경우 책임이 면제됩니다.</li>
-        <li>회사는 이용자의 귀책사유로 인한 서비스 이용 장애 또는 손해에 대해 책임을 지지 않습니다.</li>
-        <li>회사는 이용자가 게시한 콘텐츠의 신뢰성·정확성에 대해 보증하지 않으며, 이로 인한 분쟁은 당사자 간 해결을 원칙으로 합니다.</li>
-        <li>회사는 무료로 제공하는 서비스의 이용과 관련하여 이용자에게 발생한 손해에 대해 회사의 고의 또는 중대한 과실이 없는 한 책임을 지지 않습니다.</li>
-      </ol>
-
-      <h3>제10조 (분쟁의 해결)</h3>
-      <ol>
-        <li>본 약관과 관련된 분쟁이 발생한 경우 회사와 이용자는 신의성실의 원칙에 따라 해결을 위해 노력합니다.</li>
-        <li>해결되지 않을 경우 「민사소송법」에 따른 관할법원에 소를 제기할 수 있습니다.</li>
-      </ol>
-
-      <h3>부칙</h3>
-      <p>본 약관은 2026년 4월 28일부터 시행됩니다.</p>
-
-      <div class="policy__footer">
-        <p>(주)호학당 · 사업자등록번호 278-86-02319 · 대표 고현 | 임태일<br/>
-        서울 송파구 가락로5길 32 2층</p>
-      </div>
-    `,
-    '개인정보처리방침': `
-      <p class="policy__intro">
-        (주)호학당(이하 "회사")은 「개인정보 보호법」에 따라 이용자의 개인정보 보호 및 권익을 보호하고
-        개인정보와 관련한 이용자의 고충을 원활하게 처리할 수 있도록 다음과 같은 처리방침을 두고 있습니다.
-      </p>
-
-      <h3>제1조 (수집하는 개인정보 항목 및 수집 방법)</h3>
-      <ul>
-        <li>필수 항목: 작성자 휴대폰 번호, 비밀번호(암호화 저장), 부고장 내용(고인 성명, 생년월일, 별세일, 상주 정보, 장례식장 정보 등), 영정사진(선택)</li>
-        <li>자동 수집 항목: 서비스 이용기록, 접속 IP, 쿠키, 디바이스 정보</li>
-        <li>수집 방법: 웹페이지 입력, 자동 수집</li>
-      </ul>
-
-      <h3>제2조 (개인정보의 이용 목적)</h3>
-      <ul>
-        <li>부고장 서비스 제공 및 운영</li>
-        <li>이용자 본인 확인 (휴대폰 번호 + 비밀번호)</li>
-        <li>부고장 공유 및 조문 메시지 전달</li>
-        <li>서비스 개선 및 부정 이용 방지</li>
-      </ul>
-
-      <h3>제3조 (개인정보의 보유 및 이용기간)</h3>
-      <p>회사는 이용자가 부고장을 삭제하거나 서비스 이용을 중단할 때까지 개인정보를 보유합니다. 단, 관계 법령에 의해 보존할 필요가 있는 경우 해당 기간 동안 보관합니다.</p>
-
-      <h3>제4조 (개인정보의 제3자 제공)</h3>
-      <p>회사는 이용자의 개인정보를 외부에 제공하지 않습니다. 단, 다음의 경우 예외로 합니다.</p>
-      <ul>
-        <li>이용자가 사전에 동의한 경우</li>
-        <li>법령에 의해 요구되거나 수사기관이 적법한 절차에 따라 요청한 경우</li>
-      </ul>
-
-      <h3>제5조 (개인정보의 처리 위탁)</h3>
-      <p>회사는 안정적인 서비스 제공을 위해 다음의 외부 업체에 개인정보 처리를 위탁할 수 있습니다.</p>
-      <ul>
-        <li>Google Firebase (Firestore) — 부고장 데이터 저장</li>
-        <li>Supabase — 영정사진 저장</li>
-        <li>Kakao — 카카오톡 공유, 지도 서비스</li>
-      </ul>
-
-      <h3>제6조 (이용자의 권리와 행사 방법)</h3>
-      <p>이용자는 언제든지 본인의 개인정보 열람·정정·삭제·처리정지를 요구할 수 있습니다. 부고장 관리 메뉴에서 직접 열람·수정·삭제할 수 있으며, 추가 문의는 아래 연락처로 요청해주세요.</p>
-
-      <h3>제7조 (개인정보의 안전성 확보 조치)</h3>
-      <ul>
-        <li>비밀번호 SHA-256 해싱 저장</li>
-        <li>HTTPS를 통한 통신 암호화</li>
-        <li>접근 권한 관리</li>
-      </ul>
-
-      <h3>제8조 (개인정보 보호책임자)</h3>
-      <ul>
-        <li>개인정보 보호책임자: 고현</li>
-        <li>소속: (주)호학당</li>
-        <li>주소: 서울 송파구 가락로5길 32 2층</li>
-      </ul>
-
-      <h3>부칙</h3>
-      <p>본 방침은 2026년 4월 28일부터 시행됩니다.</p>
-    `,
-  };
-
   function renderPolicy(title) {
     setHeader({ title, back: true, menu: false });
-    const content = POLICY_CONTENT[title] || `<p>준비 중입니다.</p>`;
-    viewEl.innerHTML = `<div class="policy">${content}</div>`;
+    viewEl.innerHTML = `
+      <div class="policy">
+        <p>본 ${escapeHtml(title)} 문서는 데모용입니다. 실제 서비스 운영 시 약관 내용으로 교체해주세요. 약관 내용 입니다. 약관 내용 입니다. 약관 내용 입니다. 약관 내용 입니다. 약관 내용 입니다. 약관 내용 입니다. 약관 내용 입니다.</p>
+      </div>
+    `;
   }
 
   // ---------- URL hash routing ----------

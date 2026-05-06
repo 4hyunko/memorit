@@ -9,23 +9,13 @@ import {
   doc, setDoc, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { FIREBASE_CONFIG, SUPABASE_URL, SUPABASE_KEY, KAKAO_KEY } from './config.js';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBiTgTlFO99hgVXZ0MG_PKdEdlUP9s5iCY",
-  authDomain: "memorialtree-6446e.firebaseapp.com",
-  databaseURL: "https://memorialtree-6446e-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "memorialtree-6446e",
-  storageBucket: "memorialtree-6446e.firebasestorage.app",
-  messagingSenderId: "717119474073",
-  appId: "1:717119474073:web:60fa0098fc24442f396b08"
-};
-const fbApp = initializeApp(firebaseConfig);
+const fbApp = initializeApp(FIREBASE_CONFIG);
 const db = getFirestore(fbApp);
 const obitsCol = collection(db, 'obituaries');
 
 // Supabase (영정사진 저장)
-const SUPABASE_URL = 'https://nfmiybikusxwsiudaxzw.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_6zqulXul93cHF74IG3H2EQ_pI2n_e4e';
 const SUPABASE_BUCKET = 'photo';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -2390,9 +2380,17 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
   function loadKakaoMaps() {
     if (kakaoMapsPromise) return kakaoMapsPromise;
     kakaoMapsPromise = new Promise((resolve, reject) => {
-      if (!window.kakao?.maps) { reject(new Error('Kakao SDK not present')); return; }
-      if (window.kakao.maps.services) { resolve(window.kakao); return; }
-      window.kakao.maps.load(() => resolve(window.kakao));
+      const init = () => {
+        if (window.kakao?.maps?.services) { resolve(window.kakao); return; }
+        window.kakao.maps.load(() => resolve(window.kakao));
+      };
+      if (window.kakao?.maps) { init(); return; }
+      // SDK 미로드 시 동적 삽입 (config.js의 KAKAO_KEY 사용)
+      const s = document.createElement('script');
+      s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&libraries=services&autoload=false`;
+      s.onload = init;
+      s.onerror = () => reject(new Error('Kakao Maps SDK 로드 실패'));
+      document.head.appendChild(s);
     });
     return kakaoMapsPromise;
   }
@@ -2782,13 +2780,12 @@ const CHR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1e
   });
 
   // ---------- Share sheet ----------
-  const KAKAO_JS_KEY = 'bde79058e624bc54d4dcdedc60406615';
   const DEFAULT_SHARE_IMAGE = 'https://images.unsplash.com/photo-1561181286-d3fee7d55364?w=800&h=800&fit=crop&auto=format';
 
   function ensureKakaoInit() {
     if (!window.Kakao) return false;
     if (!window.Kakao.isInitialized?.()) {
-      try { window.Kakao.init(KAKAO_JS_KEY); } catch (e) { console.warn('Kakao init failed', e); return false; }
+      try { window.Kakao.init(KAKAO_KEY); } catch (e) { console.warn('Kakao init failed', e); return false; }
     }
     return true;
   }
